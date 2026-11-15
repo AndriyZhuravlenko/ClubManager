@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Club.Server.Data;
 
 /// <summary>Доступ до бази даних через Entity Framework Core.</summary>
-public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
+public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNotifier? notifier = null) : DbContext(options)
 {
     public DbSet<Pc> Pcs => Set<Pc>();
     public DbSet<AdminUser> Admins => Set<AdminUser>();
@@ -80,6 +80,42 @@ public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         // Індекси журналу: фільтр за ПК, очищення старих записів за датою
         b.Entity<EventLog>().HasIndex(e => e.At);
         b.Entity<EventLog>().HasIndex(e => e.PcId);
+    }
+
+    // Після кожного збереження повідомляємо панелі адміністратора, які розділи змінилися
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var topics = ChangedTopics();
+        var result = base.SaveChanges(acceptAllChangesOnSuccess);
+        if (topics.Count > 0) notifier?.Notify(topics);
+        return result;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken ct = default)
+    {
+        var topics = ChangedTopics();
+        var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, ct);
+        if (topics.Count > 0) notifier?.Notify(topics);
+        return result;
+    }
+
+    private HashSet<string> ChangedTopics()
+    {
+        var topics = new HashSet<string>();
+        foreach (var e in ChangeTracker.Entries())
+        {
+            if (e.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
+            switch (e.Entity)
+            {
+                case Pc: topics.Add("pcs"); break;
+                case Session: topics.Add("pcs"); topics.Add("clients"); break;   // «грає / не в клубі»
+                case Client or TopUp: topics.Add("clients"); break;
+                case EventLog: topics.Add("events"); break;
+                case AppEntry or BlockedApp or Setting: topics.Add("apps"); break;
+                case AdminUser: topics.Add("admins"); break;
+            }
+        }
+        return topics;
     }
 
     /// <summary>Додати запис у журнал (зберігається разом з наступним SaveChanges).</summary>

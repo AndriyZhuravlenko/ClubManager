@@ -3,7 +3,13 @@
 <head>
 <meta charset="utf-8">
 <title>Club Manager — звіти</title>
+<script>
+  // Усередині панелі (вкладка «Звіти») власний заголовок і посилання назад не потрібні
+  if (window.self !== window.top) document.documentElement.classList.add('embed');
+</script>
 <style>
+  html.embed header { display: none; }
+  html.embed body { margin: 0; }
   body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f5f5f4; color: #1c1917; }
   header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
   h1 { font-size: 22px; margin: 0; }

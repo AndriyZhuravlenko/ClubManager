@@ -38,6 +38,7 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<ConnectionRegistry>();
 builder.Services.AddSingleton<AgentCommander>();
 builder.Services.AddSingleton<LoginThrottle>();
+builder.Services.AddSingleton<PanelNotifier>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<AppPolicyService>();
 builder.Services.AddScoped<OwnerCredentialsService>();
@@ -151,6 +152,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHub<AgentHub>("/hubs/agent");
+app.MapHub<PanelHub>("/hubs/panel");   // push-оновлення панелі адміністратора
 app.MapAuthApi();
 app.MapAdminApi();
 app.MapReportsApi();

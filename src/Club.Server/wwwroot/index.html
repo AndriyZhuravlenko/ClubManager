@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <title>Club Manager — панель адміністратора</title>
 <style>
-  body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f5f5f4; color: #1c1917; }
-  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  h1 { font-size: 22px; margin: 0; }
-  h2 { font-size: 17px; margin: 28px 0 10px; display: flex; gap: 12px; align-items: center; }
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f5f5f4; color: #1c1917; }
+  .wrap { padding: 16px 24px 32px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 24px 0; flex-wrap: wrap; }
+  h1 { font-size: 21px; margin: 0; }
+  h2 { font-size: 17px; margin: 24px 0 10px; display: flex; gap: 12px; align-items: center; }
+  h2:first-child { margin-top: 4px; }
   table { border-collapse: collapse; width: 100%; background: #fff; }
   th, td { border-bottom: 1px solid #e7e5e4; padding: 8px 10px; text-align: left; font-size: 14px; }
   th { background: #fafaf9; font-weight: 600; }
@@ -25,61 +27,172 @@
   .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
   .filters select, .filters input { padding: 4px 6px; font-size: 13px; }
   button { margin: 2px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
+  button:disabled { cursor: default; }
   .muted { color: #78716c; font-size: 12px; }
   #events td { font-size: 13px; }
   .hidden { display: none !important; }
-  .dlg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
-  .dlg .box { background: #fff; padding: 20px; border-radius: 8px; min-width: 320px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
-  .dlg input { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 6px; font-size: 14px; }
+
+  /* Стан з'єднання і підсумок по клубу */
+  .live { font-size: 12px; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+  .live.ok { background: #dcfce7; color: #166534; }
+  .live.poll { background: #fef3c7; color: #92400e; }
+  .live.down { background: #fee2e2; color: #991b1b; }
+  .summary { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin: 0 0 12px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+  /* Вкладки */
+  nav { display: flex; gap: 2px; padding: 12px 24px 0; border-bottom: 1px solid #d6d3d1; flex-wrap: wrap; }
+  nav a { padding: 8px 16px; text-decoration: none; color: #44403c; font-size: 14px; border-radius: 8px 8px 0 0;
+          border: 1px solid transparent; border-bottom: none; margin-bottom: -1px; }
+  nav a:hover { background: #e7e5e4; }
+  nav a.active { background: #fff; border-color: #d6d3d1; color: #1c1917; font-weight: 600; }
+
+  /* Карта клубу */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; background: #fff; padding: 8px 10px;
+             border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+  .toolbar .sep { width: 1px; height: 22px; background: #e7e5e4; margin: 0 6px; }
+  .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .tile { position: relative; background: #fff; border-radius: 10px; padding: 12px 14px; border-top: 6px solid #a8a29e;
+          cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-height: 128px; user-select: none; }
+  .tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,.14); }
+  .tile.sel { outline: 3px solid #2563eb; outline-offset: 1px; }
+  .tile .chk { position: absolute; top: 10px; right: 10px; width: 18px; height: 18px; cursor: pointer; }
+  .tile .name { font-weight: 600; font-size: 16px; padding-right: 24px; }
+  .tile .state { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin-top: 2px; }
+  .tile .who { font-size: 13px; margin-top: 6px; min-height: 18px; }
+  .tile .timer { font-size: 26px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .tile .timer.small { font-size: 15px; padding: 7px 0; }
+  .tile .timer.warn { color: #dc2626; }
+  .tile .meta { font-size: 11px; color: #78716c; margin-top: 4px; }
+  .st-free    { border-top-color: #22c55e; } .st-free .state    { color: #15803d; }
+  .st-busy    { border-top-color: #3b82f6; } .st-busy .state    { color: #1d4ed8; }
+  .st-paused  { border-top-color: #f59e0b; background: #fffbeb; } .st-paused .state { color: #b45309; }
+  .st-service { border-top-color: #8b5cf6; } .st-service .state { color: #6d28d9; }
+  .st-offline { border-top-color: #a8a29e; background: #f5f5f4; color: #78716c; } .st-offline .state { color: #57534e; }
+  .c-free { background: #22c55e; } .c-busy { background: #3b82f6; } .c-paused { background: #f59e0b; }
+  .c-service { background: #8b5cf6; } .c-offline { background: #a8a29e; }
+
+  /* Діалоги */
+  .dlg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  #dlg { z-index: 20; }
+  .dlg .box { background: #fff; padding: 20px; border-radius: 8px; min-width: 320px; max-width: 520px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+  #dlg input { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 6px; font-size: 14px; }
+  #dlgText { white-space: pre-line; }
   .dlg .btns { text-align: right; margin-top: 12px; }
+  #pcDlg .box { min-width: 420px; }
+  #pcDlgTimer { font-size: 30px; font-variant-numeric: tabular-nums; margin: 6px 0; }
+  .grp { margin-top: 12px; }
+  .grp .lbl { font-size: 12px; color: #78716c; margin-bottom: 2px; }
+  iframe#reportsFrame { width: 100%; border: 0; background: #f5f5f4; min-height: 400px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Club Manager — панель адміністратора</h1>
-  <div><span id="me" class="muted"></span>
-    <a id="reportsLink" href="/reports.html" class="hidden" style="margin:0 8px">Звіти</a>
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+    <span id="live" class="live poll" title="">з'єднання…</span>
+    <span id="me" class="muted"></span>
     <button onclick="changePassword()">Змінити пароль</button>
-    <button onclick="logout()">Вийти</button></div>
+    <button onclick="logout()">Вийти</button>
+  </div>
 </header>
 
-<table>
-  <thead>
-    <tr><th>ПК</th><th>Мережа</th><th>Сеанс</th><th>Залишилось</th><th>Керування сеансом</th><th>Команди</th></tr>
-  </thead>
-  <tbody id="pcs"><tr><td colspan="6">Завантаження…</td></tr></tbody>
-</table>
+<nav id="tabs">
+  <a href="#pcs" data-tab="pcs">Комп'ютери</a>
+  <a href="#clients" data-tab="clients">Клієнти</a>
+  <a href="#apps" data-tab="apps">Програми</a>
+  <a href="#events" data-tab="events">Журнал</a>
+  <a href="#reports" data-tab="reports" data-owner="1" class="hidden">Звіти</a>
+  <a href="#admins" data-tab="admins" data-owner="1" class="hidden">Адміністратори</a>
+</nav>
 
-<h2>Клієнти <button onclick="newClient()">+ Новий клієнт</button></h2>
-<table>
-  <thead><tr><th>Логін</th><th>Баланс</th><th>Стан</th><th>Дії</th></tr></thead>
-  <tbody id="clients"></tbody>
-</table>
+<div class="wrap">
 
-<h2>Дозволені програми <button onclick="newApp()">+ Програма</button></h2>
-<p class="muted" style="margin:0 0 8px">
-  Режим контролю: <b id="appMode">…</b>
-  <button id="appModeBtn" class="hidden" onclick="toggleMode()"></button>
-  <br>Програми з папки C:\Windows і з папок програм каталогу дозволені завжди.
-</p>
-<table>
-  <thead><tr><th>Назва</th><th>Шлях на клієнтських ПК</th><th>Дії</th></tr></thead>
-  <tbody id="apps"></tbody>
-</table>
+<!-- ===== Комп'ютери: карта клубу ===== -->
+<section id="tab-pcs">
+  <div class="summary" id="summary"></div>
+  <div class="toolbar">
+    <b id="selCount">Виділено: 0</b>
+    <button onclick="selectAllOnline()">Виділити всі онлайн</button>
+    <button onclick="clearSelection()">Зняти виділення</button>
+    <span class="sep"></span>
+    <span class="muted">Для виділених:</span>
+    <button class="grpBtn" onclick="groupStart()">Гостьовий сеанс</button>
+    <button class="grpBtn" onclick="groupCommand('ShowMessage')">Повідомлення</button>
+    <button class="grpBtn" onclick="groupCommand('Lock')">Блок</button>
+    <button class="grpBtn" onclick="groupCommand('Unlock')">Розблок</button>
+    <button class="grpBtn" onclick="groupCommand('Reboot')">Перезавантажити</button>
+    <button class="grpBtn" onclick="groupCommand('Shutdown')">Вимкнути</button>
+  </div>
+  <div class="map" id="map"><div class="muted">Завантаження…</div></div>
+  <p class="muted">Клік на плитку — дії з цим ПК. Прапорець у кутку — виділити для групової дії.</p>
+</section>
 
-<h2>Заборонені програми
-  <button onclick="newBlocked()">+ Заборонити</button>
-  <button onclick="addRecommendedBlocked()">Додати рекомендовані</button></h2>
-<p class="muted" style="margin:0 0 8px">
-  Закриваються завжди — у будь-якому режимі контролю і навіть на екрані блокування (крім службових сеансів адміністратора).
-  Вкажіть ім'я файлу (<b>taskmgr.exe</b>, можна з * : <b>cheat*.exe</b>) або повний шлях до файлу чи папки.
-</p>
-<table>
-  <thead><tr><th>Ім'я або шлях</th><th>Дії</th></tr></thead>
-  <tbody id="blocked"></tbody>
-</table>
+<!-- ===== Клієнти ===== -->
+<section id="tab-clients" class="hidden">
+  <h2>Клієнти <button onclick="newClient()">+ Новий клієнт</button></h2>
+  <table>
+    <thead><tr><th>Логін</th><th>Баланс</th><th>Стан</th><th>Дії</th></tr></thead>
+    <tbody id="clients"></tbody>
+  </table>
+</section>
 
-<section id="adminsSection" class="hidden">
+<!-- ===== Програми ===== -->
+<section id="tab-apps" class="hidden">
+  <h2>Дозволені програми <button onclick="newApp()">+ Програма</button></h2>
+  <p class="muted" style="margin:0 0 8px">
+    Режим контролю: <b id="appMode">…</b>
+    <button id="appModeBtn" class="hidden" onclick="toggleMode()"></button>
+    <br>Програми з папки C:\Windows і з папок програм каталогу дозволені завжди.
+  </p>
+  <table>
+    <thead><tr><th>Назва</th><th>Шлях на клієнтських ПК</th><th>Дії</th></tr></thead>
+    <tbody id="apps"></tbody>
+  </table>
+
+  <h2>Заборонені програми
+    <button onclick="newBlocked()">+ Заборонити</button>
+    <button onclick="addRecommendedBlocked()">Додати рекомендовані</button></h2>
+  <p class="muted" style="margin:0 0 8px">
+    Закриваються завжди — у будь-якому режимі контролю і навіть на екрані блокування (крім службових сеансів адміністратора).
+    Вкажіть ім'я файлу (<b>taskmgr.exe</b>, можна з * : <b>cheat*.exe</b>) або повний шлях до файлу чи папки.
+  </p>
+  <table>
+    <thead><tr><th>Ім'я або шлях</th><th>Дії</th></tr></thead>
+    <tbody id="blocked"></tbody>
+  </table>
+</section>
+
+<!-- ===== Журнал ===== -->
+<section id="tab-events" class="hidden">
+  <div class="filters">
+    ПК: <select id="fPc" onchange="refreshEvents()"><option value="">усі</option><option value="none">панель (без ПК)</option></select>
+    Хто: <select id="fCat" onchange="refreshEvents()">
+      <option value="">усі</option>
+      <option value="admin">адміністратори</option>
+      <option value="client">клієнти</option>
+      <option value="agent">агенти ПК</option>
+      <option value="system">система</option>
+    </select>
+    Пошук: <input id="fText" placeholder="текст або логін" oninput="refreshEventsSoon()">
+    Показати: <select id="fTake" onchange="refreshEvents()">
+      <option>100</option><option>300</option><option>1000</option>
+    </select>
+    <button onclick="resetFilters()">Скинути</button>
+  </div>
+  <table id="events">
+    <thead><tr><th>Час</th><th>ПК</th><th>Хто</th><th>Подія</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ===== Звіти (лише власник) ===== -->
+<section id="tab-reports" class="hidden">
+  <iframe id="reportsFrame" title="Звіти"></iframe>
+</section>
+
+<!-- ===== Адміністратори (лише власник) ===== -->
+<section id="tab-admins" class="hidden">
   <h2>Адміністратори <button onclick="newAdmin()">+ Новий адміністратор</button></h2>
   <table>
     <thead><tr><th>Логін</th><th>Роль</th><th>Дії</th></tr></thead>
@@ -87,26 +200,18 @@
   </table>
 </section>
 
-<h2>Журнал подій</h2>
-<div class="filters">
-  ПК: <select id="fPc" onchange="refreshEvents()"><option value="">усі</option><option value="none">панель (без ПК)</option></select>
-  Хто: <select id="fCat" onchange="refreshEvents()">
-    <option value="">усі</option>
-    <option value="admin">адміністратори</option>
-    <option value="client">клієнти</option>
-    <option value="agent">агенти ПК</option>
-    <option value="system">система</option>
-  </select>
-  Пошук: <input id="fText" placeholder="текст або логін" oninput="refreshEventsSoon()">
-  Показати: <select id="fTake" onchange="refreshEvents()">
-    <option>100</option><option>300</option><option>1000</option>
-  </select>
-  <button onclick="resetFilters()">Скинути</button>
 </div>
-<table id="events">
-  <thead><tr><th>Час</th><th>ПК</th><th>Хто</th><th>Подія</th></tr></thead>
-  <tbody></tbody>
-</table>
+
+<!-- Дії з одним ПК (відкривається кліком на плитку) -->
+<div id="pcDlg" class="dlg hidden" onclick="if (event.target === this) closePcDialog()">
+  <div class="box">
+    <div id="pcDlgHead"></div>
+    <div id="pcDlgTimer"></div>
+    <div id="pcDlgMeta" class="muted"></div>
+    <div id="pcDlgBtns"></div>
+    <div class="btns"><button onclick="closePcDialog()">Закрити</button></div>
+  </div>
+</div>
 
 <!-- Власне діалогове вікно замість alert/confirm/prompt браузера -->
 <div id="dlg" class="dlg hidden">
@@ -365,6 +470,7 @@ function refreshEventsSoon() {
 }
 
 async function refreshEvents() {
+  eventsStale = false;
   const params = new URLSearchParams();
   const pc = document.getElementById('fPc').value;
   const cat = document.getElementById('fCat').value;
@@ -387,9 +493,9 @@ async function refreshEvents() {
 }
 
 function filterPc(id) {
+  closePcDialog();
   document.getElementById('fPc').value = String(id);
-  refreshEvents();
-  document.getElementById('events').scrollIntoView({ behavior: 'smooth' });
+  showTab('events');
 }
 
 function resetFilters() {
@@ -400,99 +506,7 @@ function resetFilters() {
   refreshEvents();
 }
 
-// ---------- Оновлення сторінки ----------
-
-async function refresh() {
-  try {
-    const pcs = await getJson('/api/pcs');
-    pcNames = Object.fromEntries(pcs.map(p => [p.id, p.displayName]));
-    // Найновіша версія агента серед ПК; ПК зі старішою версією позначаються
-    const newestAgent = pcs.map(p => p.agentVersion || '').sort().pop() || '';
-    renderRows('pcs', 6, pcs.map(p => {
-      const s = p.session;
-      const net = p.online ? '<span class="badge on">онлайн</span>' : '<span class="badge off">офлайн</span>';
-      const service = s && s.serviceAdmin;
-      const who = s ? (service ? `адмін ${esc(s.serviceAdmin)}` : s.client ? `клієнт ${esc(s.client)}` : 'гість') : '';
-      const ses = !s ? '<span class="badge free">вільний</span>'
-        : s.paused ? `<span class="badge bad">${who}, призупинено</span>`
-        : service ? `<span class="badge on">${who}, службовий</span>`
-        : `<span class="badge busy">${who}, до ${time(s.endsAt)}</span>`;
-      const left = s ? (service ? 'без обмежень' : fmt(s.remainingSeconds)) : '—';
-      const sesBtns = s
-        ? (s.client || service ? '' : `<button onclick="extendSession(${p.id})">+ час</button>`) +
-          `<button onclick="endSession(${p.id})">Завершити</button>`
-        : `<button onclick="startSession(${p.id})">Гостьовий сеанс</button>`;
-      const dis = p.online ? '' : 'disabled';
-      const cmdBtns = `
-        <button ${dis} onclick="sendCommand(${p.id}, 'ShowMessage')">Повідомлення</button>
-        <button ${dis} onclick="sendCommand(${p.id}, 'Lock')">Блок</button>
-        <button ${dis} onclick="sendCommand(${p.id}, 'Unlock')">Розблок</button>
-        <button ${dis} onclick="sendCommand(${p.id}, 'Reboot')">Перезавантажити</button>
-        <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button>`;
-      const agent = p.online && p.agent ? ` · агент: ${p.agent.cpuPercent}% CPU, ${p.agent.memoryMb} МБ` : '';
-      const version = p.agentVersion
-        ? `<div class="muted">версія ${esc(p.agentVersion)}${p.agentVersion !== newestAgent
-            ? ' <span class="badge bad" title="На іншому ПК встановлено новішу версію агента">стара версія</span>' : ''}</div>`
-        : '';
-      const name = `<b>${esc(p.displayName)}</b> <a href="#" onclick="rename(${p.id}); return false;" title="Перейменувати">✎</a>
-            <a href="#" onclick="filterPc(${p.id}); return false;" style="font-size:12px">журнал</a>
-            <div class="muted">${esc(p.machineName)}${agent}</div>${version}`;
-      return { id: p.id, cells: [name, net, ses, left, sesBtns, cmdBtns] };
-    }), 'Поки що жоден ПК не підключався. Запустіть агента на віртуальній машині.');
-
-    const clients = await getJson('/api/clients');
-    clientNames = Object.fromEntries(clients.map(c => [c.id, c.login]));
-    renderRows('clients', 4, clients.map(c => {
-      const state = c.isBlocked ? '<span class="badge bad">заблоковано</span>'
-        : c.playing ? '<span class="badge busy">грає</span>' : '<span class="badge off">не в клубі</span>';
-      const btns = `<button onclick="topUp(${c.id})">Поповнити</button>
-        <button onclick="setClientPassword(${c.id})">Пароль</button>
-        <button onclick="blockClient(${c.id}, ${!c.isBlocked})">${c.isBlocked ? 'Розблокувати' : 'Заблокувати'}</button>` +
-        (me && me.role === 'Owner' ? `<button onclick="deleteClient(${c.id})">Видалити</button>` : '');
-      return { id: c.id, cells: [`<b>${esc(c.login)}</b>`, minutesText(c.balanceMinutes), state, btns] };
-    }), 'Клієнтів ще немає');
-
-    const policy = await getJson('/api/apps');
-    enforce = policy.enforce;
-    appNames = Object.fromEntries(policy.apps.map(a => [a.id, a.name]));
-    document.getElementById('appMode').textContent = enforce
-      ? 'закривати недозволені програми' : 'лише спостереження (порушення записуються в журнал)';
-    const modeBtn = document.getElementById('appModeBtn');
-    modeBtn.textContent = enforce ? 'Перейти в режим спостереження' : 'Увімкнути закривання';
-    modeBtn.classList.toggle('hidden', !(me && me.role === 'Owner'));
-    renderRows('apps', 3, policy.apps.map(a => ({
-      id: a.id,
-      cells: [`<b>${esc(a.name)}</b>`, `<span class="muted">${esc(a.path)}</span>`, `<button onclick="deleteApp(${a.id})">Прибрати</button>`]
-    })), 'Каталог порожній — додайте програми, які клієнти можуть запускати');
-
-    const blocked = await getJson('/api/blocked');
-    blockedNames = Object.fromEntries(blocked.map(b => [b.id, b.pattern]));
-    renderRows('blocked', 2, blocked.map(b => ({
-      id: b.id,
-      cells: [`<b>${esc(b.pattern)}</b>`, `<button onclick="deleteBlocked(${b.id})">Прибрати</button>`]
-    })), 'Чорний список порожній');
-
-    if (me && me.role === 'Owner') {
-      const admins = await getJson('/api/admins');
-      adminNames = Object.fromEntries(admins.map(a => [a.id, a.login]));
-      renderRows('admins', 3, admins.map(a => ({
-        id: a.id,
-        cells: [`<b>${esc(a.login)}</b>`, a.role === 'Owner' ? 'власник' : 'адміністратор зміни',
-                a.login === me.login ? '<span class="muted">це ви</span>' : `<button onclick="deleteAdmin(${a.id})">Видалити</button>`]
-      })), '');
-    }
-
-    updatePcFilter(pcs);
-    await refreshEvents();
-  } catch (err) {
-    if (String(err.message) === '401') return;
-    const tbody = document.getElementById('pcs');
-    tbody.dataset.ids = '';
-    tbody.innerHTML = '<tr><td colspan="6">Немає зв’язку із сервером</td></tr>';
-  }
-}
-
-// Оновлюємо лише ті клітинки, вміст яких змінився. Якщо перемальовувати
+// Оновлюємо лише ті клітинки таблиці, вміст яких змінився. Якщо перемальовувати
 // всю таблицю, кнопки замінюються новими і клік у цей момент губиться.
 function renderRows(tbodyId, cols, rows, emptyText) {
   const tbody = document.getElementById(tbodyId);
@@ -514,6 +528,404 @@ function renderRows(tbodyId, cols, rows, emptyText) {
   });
 }
 
+// ---------- Стан ПК і карта клубу ----------
+
+const stateNames = { free: 'Вільний', busy: 'Зайнятий', paused: 'Призупинено', service: 'Службовий', offline: 'Офлайн' };
+let pcs = [];             // останній знімок /api/pcs
+let pcsAt = Date.now();   // коли його отримано (для локального відліку таймерів)
+const selected = new Set();
+const tiles = {};         // id → елементи плитки
+let openPcId = null;      // ПК, відкритий у діалозі дій
+
+function pcState(p) {
+  const s = p.session;
+  if (!p.online) return 'offline';
+  if (!s) return 'free';
+  if (s.paused) return 'paused';
+  if (s.serviceAdmin) return 'service';
+  return 'busy';
+}
+
+function whoText(p) {
+  const s = p.session;
+  if (!s) return '';
+  if (s.serviceAdmin) return `адмін ${esc(s.serviceAdmin)}`;
+  const who = s.client ? `клієнт <b>${esc(s.client)}</b>` : 'гість';
+  return s.paused ? who : `${who}, до ${time(s.endsAt)}`;
+}
+
+// Залишок часу рахується в браузері щосекунди, сервер лише уточнює його при змінах
+function remainingSec(p) {
+  const s = p.session;
+  if (!s || s.serviceAdmin) return null;
+  return s.paused ? s.remainingSeconds
+    : Math.max(0, s.remainingSeconds - Math.floor((Date.now() - pcsAt) / 1000));
+}
+function timerText(p) {
+  const s = p.session;
+  if (!s) return '—';
+  if (s.serviceAdmin) return 'без обмежень';
+  return fmt(remainingSec(p)) + (s.paused ? ' ⏸' : '');
+}
+
+function newestAgentVersion() { return pcs.map(p => p.agentVersion || '').sort().pop() || ''; }
+
+function metaHtml(p, newest) {
+  const parts = [esc(p.machineName)];
+  if (p.online && p.agent) parts.push(`${p.agent.cpuPercent}% CPU, ${p.agent.memoryMb} МБ`);
+  let html = parts.join(' · ');
+  if (p.agentVersion) html += `<br>агент ${esc(p.agentVersion)}` + (p.agentVersion !== newest
+    ? ' <span class="badge bad" title="На іншому ПК встановлено новішу версію агента">стара версія</span>' : '');
+  return html;
+}
+
+function setHtml(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+
+// Плитки створюються один раз і далі лише оновлюються: інакше клік
+// або прапорець у момент оновлення губилися б
+function makeTile(id) {
+  const el = document.createElement('div');
+  el.className = 'tile';
+  el.innerHTML = '<input type="checkbox" class="chk" title="Виділити для групової дії">' +
+                 '<div class="body"></div><div class="timer"></div><div class="meta"></div>';
+  const t = { el, chk: el.querySelector('.chk'), body: el.querySelector('.body'),
+              timer: el.querySelector('.timer'), meta: el.querySelector('.meta') };
+  t.chk.onclick = e => e.stopPropagation();
+  t.chk.onchange = () => { t.chk.checked ? selected.add(id) : selected.delete(id); updateSelection(); };
+  el.onclick = () => openPcDialog(id);
+  return t;
+}
+
+function renderMap() {
+  const map = document.getElementById('map');
+  if (!pcs.length) {
+    map.innerHTML = '<div class="muted">Поки що жоден ПК не підключався. Запустіть агента на віртуальній машині.</div>';
+    for (const k in tiles) delete tiles[k];
+    return;
+  }
+  if (!Object.keys(tiles).length) map.innerHTML = '';
+  const newest = newestAgentVersion();
+  const ids = new Set(pcs.map(p => p.id));
+  for (const id of Object.keys(tiles)) if (!ids.has(+id)) { tiles[id].el.remove(); delete tiles[id]; selected.delete(+id); }
+
+  pcs.forEach(p => {
+    const t = tiles[p.id] ??= makeTile(p.id);
+    map.appendChild(t.el);                     // зберігає порядок за назвою
+    const st = pcState(p);
+    t.el.className = `tile st-${st}` + (selected.has(p.id) ? ' sel' : '');
+    t.chk.checked = selected.has(p.id);
+    setHtml(t.body, `<div class="name">${esc(p.displayName)}</div>` +
+      `<div class="state">${stateNames[st]}</div>` +
+      `<div class="who">${whoText(p) || (st === 'free' ? '<span class="muted">готовий до роботи</span>' : '')}</div>`);
+    setHtml(t.meta, metaHtml(p, newest));
+  });
+  tickTimers();
+  updateSummary();
+  updateSelection();
+}
+
+function tickTimers() {
+  pcs.forEach(p => {
+    const t = tiles[p.id];
+    if (!t) return;
+    const sec = remainingSec(p);
+    t.timer.textContent = timerText(p);
+    t.timer.className = 'timer' + (!p.session || p.session.serviceAdmin ? ' small' : '') +
+      (sec !== null && sec < 300 && !p.session.paused ? ' warn' : '');
+  });
+  if (openPcId !== null) {
+    const p = pcs.find(x => x.id === openPcId);
+    if (p) document.getElementById('pcDlgTimer').textContent = timerText(p);
+  }
+}
+
+function updateSummary() {
+  const count = { free: 0, busy: 0, paused: 0, service: 0, offline: 0 };
+  pcs.forEach(p => count[pcState(p)]++);
+  const online = pcs.length - count.offline;
+  setHtml(document.getElementById('summary'),
+    `<span>Онлайн: <b>${online}</b> з ${pcs.length}</span>` +
+    Object.keys(count).map(k => `<span><span class="dot c-${k}"></span>${stateNames[k]}: <b>${count[k]}</b></span>`).join(''));
+}
+
+// ---------- Виділення і групові дії ----------
+
+function updateSelection() {
+  document.getElementById('selCount').textContent = `Виділено: ${selected.size}`;
+  document.querySelectorAll('.grpBtn').forEach(b => b.disabled = selected.size === 0);
+  for (const id in tiles) tiles[id].el.classList.toggle('sel', selected.has(+id));
+}
+function selectAllOnline() {
+  pcs.filter(p => p.online).forEach(p => selected.add(p.id));
+  renderMap();
+}
+function clearSelection() { selected.clear(); renderMap(); }
+
+// Запит без діалогу помилки: повертає null при успіху або текст помилки
+async function quietApi(method, url, body) {
+  try {
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' },
+                                 body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401) { location.href = '/login.html'; return 'потрібно увійти'; }
+    if (r.ok) return null;
+    try { const j = await r.json(); if (j.error) return j.error; } catch {}
+    return 'HTTP ' + r.status;
+  } catch { return 'немає зв\'язку із сервером'; }
+}
+
+async function runGroup(list, title, call) {
+  const results = await Promise.all(list.map(async p => ({ p, err: await call(p) })));
+  const failed = results.filter(r => r.err);
+  const ok = results.length - failed.length;
+  let text = `${title}: виконано на ${ok} з ${results.length} ПК.`;
+  if (failed.length) text += '\n\nНе вдалося:\n' + failed.map(r => `• ${r.p.displayName}: ${r.err}`).join('\n');
+  await dialog(text, 'alert');
+  refresh();
+}
+
+const groupTitles = { ShowMessage: 'Повідомлення', Lock: 'Блокування', Unlock: 'Розблокування',
+                      Reboot: 'Перезавантаження', Shutdown: 'Вимкнення' };
+
+async function groupCommand(type) {
+  const chosen = pcs.filter(p => selected.has(p.id));
+  const list = chosen.filter(p => p.online);
+  const skipped = chosen.length - list.length;
+  if (!list.length) { await dialog('Серед виділених немає ПК у мережі', 'alert'); return; }
+  const names = list.map(p => p.displayName).join(', ');
+  const note = skipped ? `\n(${skipped} ПК офлайн — їх буде пропущено)` : '';
+  let text = null;
+  if (type === 'ShowMessage') {
+    text = await dialog(`Текст повідомлення для ${list.length} ПК (${names}):${note}`, 'prompt');
+    if (!text) return;
+  } else {
+    const verbs = { Lock: 'Заблокувати', Unlock: 'Розблокувати', Reboot: 'Перезавантажити', Shutdown: 'Вимкнути' };
+    const warn = type === 'Reboot' || type === 'Shutdown' ? '\nАктивні сеанси на них буде завершено.' : '';
+    if (!await dialog(`${verbs[type]} ${list.length} ПК: ${names}?${warn}${note}`)) return;
+  }
+  await runGroup(list, groupTitles[type], p => quietApi('POST', `/api/pcs/${p.id}/command`, { type, text }));
+}
+
+async function groupStart() {
+  const list = pcs.filter(p => selected.has(p.id) && p.online && !p.session);
+  if (!list.length) { await dialog('Серед виділених немає вільних ПК у мережі', 'alert'); return; }
+  const m = await askNumber(`Гостьовий сеанс на ${list.length} ПК (${list.map(p => p.displayName).join(', ')}): на скільки хвилин?`, '60', 1440);
+  if (!m) return;
+  await runGroup(list, 'Гостьові сеанси', p => quietApi('POST', `/api/pcs/${p.id}/session`, { minutes: m }));
+}
+
+// ---------- Діалог дій з одним ПК ----------
+
+function openPcDialog(id) {
+  openPcId = id;
+  document.getElementById('pcDlg').classList.remove('hidden');
+  renderPcDialog();
+}
+function closePcDialog() {
+  openPcId = null;
+  document.getElementById('pcDlg').classList.add('hidden');
+}
+
+function renderPcDialog() {
+  if (openPcId === null) return;
+  const p = pcs.find(x => x.id === openPcId);
+  if (!p) { closePcDialog(); return; }
+  const st = pcState(p);
+  const s = p.session;
+  setHtml(document.getElementById('pcDlgHead'),
+    `<div style="display:flex; justify-content:space-between; align-items:center; gap:12px">` +
+    `<b style="font-size:18px">${esc(p.displayName)}</b>` +
+    `<span><span class="dot c-${st}"></span>${stateNames[st]}</span></div>` +
+    `<div style="margin-top:6px">${whoText(p) || '<span class="muted">сеансу немає</span>'}</div>`);
+  setHtml(document.getElementById('pcDlgMeta'), metaHtml(p, newestAgentVersion()));
+
+  const dis = p.online ? '' : 'disabled';
+  const ses = s
+    ? (s.client || s.serviceAdmin ? '' : `<button onclick="extendSession(${p.id})">+ час</button>`) +
+      `<button onclick="endSession(${p.id})">Завершити сеанс</button>`
+    : `<button onclick="startSession(${p.id})">Гостьовий сеанс</button>`;
+  setHtml(document.getElementById('pcDlgBtns'),
+    `<div class="grp"><div class="lbl">Сеанс</div>${ses}</div>` +
+    `<div class="grp"><div class="lbl">Команди${p.online ? '' : ' (ПК не в мережі)'}</div>
+      <button ${dis} onclick="sendCommand(${p.id}, 'ShowMessage')">Повідомлення</button>
+      <button ${dis} onclick="sendCommand(${p.id}, 'Lock')">${s && !s.paused ? 'Призупинити (блок)' : 'Блок'}</button>
+      <button ${dis} onclick="sendCommand(${p.id}, 'Unlock')">${s && s.paused ? 'Відновити (розблок)' : 'Розблок'}</button>
+      <button ${dis} onclick="sendCommand(${p.id}, 'Reboot')">Перезавантажити</button>
+      <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button></div>` +
+    `<div class="grp"><div class="lbl">Інше</div>
+      <button onclick="rename(${p.id})">Перейменувати</button>
+      <button onclick="filterPc(${p.id})">Журнал цього ПК</button></div>`);
+  tickTimers();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('dlg').classList.contains('hidden')) closePcDialog();
+});
+
+// ---------- Завантаження розділів ----------
+
+async function loadPcs() {
+  pcs = await getJson('/api/pcs');
+  pcsAt = Date.now();
+  pcNames = Object.fromEntries(pcs.map(p => [p.id, p.displayName]));
+  renderMap();
+  renderPcDialog();
+  updatePcFilter(pcs);
+}
+
+async function loadClients() {
+  const clients = await getJson('/api/clients');
+  clientNames = Object.fromEntries(clients.map(c => [c.id, c.login]));
+  renderRows('clients', 4, clients.map(c => {
+    const state = c.isBlocked ? '<span class="badge bad">заблоковано</span>'
+      : c.playing ? '<span class="badge busy">грає</span>' : '<span class="badge off">не в клубі</span>';
+    const btns = `<button onclick="topUp(${c.id})">Поповнити</button>
+      <button onclick="setClientPassword(${c.id})">Пароль</button>
+      <button onclick="blockClient(${c.id}, ${!c.isBlocked})">${c.isBlocked ? 'Розблокувати' : 'Заблокувати'}</button>` +
+      (me && me.role === 'Owner' ? `<button onclick="deleteClient(${c.id})">Видалити</button>` : '');
+    return { id: c.id, cells: [`<b>${esc(c.login)}</b>`, minutesText(c.balanceMinutes), state, btns] };
+  }), 'Клієнтів ще немає');
+}
+
+async function loadApps() {
+  const policy = await getJson('/api/apps');
+  enforce = policy.enforce;
+  appNames = Object.fromEntries(policy.apps.map(a => [a.id, a.name]));
+  document.getElementById('appMode').textContent = enforce
+    ? 'закривати недозволені програми' : 'лише спостереження (порушення записуються в журнал)';
+  const modeBtn = document.getElementById('appModeBtn');
+  modeBtn.textContent = enforce ? 'Перейти в режим спостереження' : 'Увімкнути закривання';
+  modeBtn.classList.toggle('hidden', !(me && me.role === 'Owner'));
+  renderRows('apps', 3, policy.apps.map(a => ({
+    id: a.id,
+    cells: [`<b>${esc(a.name)}</b>`, `<span class="muted">${esc(a.path)}</span>`, `<button onclick="deleteApp(${a.id})">Прибрати</button>`]
+  })), 'Каталог порожній — додайте програми, які клієнти можуть запускати');
+
+  const blocked = await getJson('/api/blocked');
+  blockedNames = Object.fromEntries(blocked.map(b => [b.id, b.pattern]));
+  renderRows('blocked', 2, blocked.map(b => ({
+    id: b.id,
+    cells: [`<b>${esc(b.pattern)}</b>`, `<button onclick="deleteBlocked(${b.id})">Прибрати</button>`]
+  })), 'Чорний список порожній');
+}
+
+async function loadAdmins() {
+  if (!me || me.role !== 'Owner') return;
+  const admins = await getJson('/api/admins');
+  adminNames = Object.fromEntries(admins.map(a => [a.id, a.login]));
+  renderRows('admins', 3, admins.map(a => ({
+    id: a.id,
+    cells: [`<b>${esc(a.login)}</b>`, a.role === 'Owner' ? 'власник' : 'адміністратор зміни',
+            a.login === me.login ? '<span class="muted">це ви</span>' : `<button onclick="deleteAdmin(${a.id})">Видалити</button>`]
+  })), '');
+}
+
+const loaders = { pcs: loadPcs, clients: loadClients, apps: loadApps, admins: loadAdmins };
+let eventsStale = true;   // журнал перезавантажується лише на відкритій вкладці
+
+async function load(topics) {
+  try {
+    for (const t of topics) {
+      if (t === 'events') {
+        if (currentTab === 'events') await refreshEvents(); else eventsStale = true;
+      } else if (loaders[t]) await loaders[t]();
+    }
+    serverReachable(true);
+  } catch (err) {
+    if (String(err.message) !== '401') serverReachable(false);
+  }
+}
+const allTopics = ['pcs', 'clients', 'apps', 'admins', 'events'];
+function refreshAll() { return load(allTopics); }
+
+// Після дії в панелі: якщо працює push, сервер сам надішле сповіщення про зміну
+function refresh() { if (!live) refreshAll(); }
+
+// Таймери на плитках оновлюються щосекунди без запитів до сервера
+setInterval(tickTimers, 1000);
+
+// ---------- Push-оновлення через SignalR ----------
+// Мінімальний клієнт протоколу SignalR (JSON поверх WebSocket) без сторонніх бібліотек:
+// 1) рукостискання {"protocol":"json","version":1}; 2) сервер надсилає виклики
+// {"type":1,"target":"Changed","arguments":[[...]]}; 3) обидві сторони шлють ping {"type":6}.
+// Кожне повідомлення закінчується символом 0x1E.
+
+const RS = '\x1e';
+let live = false, liveSince = null, pushCount = 0, reachable = true;
+
+function updateLive() {
+  const el = document.getElementById('live');
+  if (!reachable) {
+    el.className = 'live down'; el.textContent = '● немає зв\'язку із сервером'; el.title = '';
+  } else if (live) {
+    el.className = 'live ok'; el.textContent = '● оновлення в реальному часі';
+    el.title = `Push-з'єднання SignalR з ${liveSince.toLocaleTimeString('uk-UA')}. Отримано сповіщень: ${pushCount}`;
+  } else {
+    el.className = 'live poll'; el.textContent = '● резервне опитування';
+    el.title = 'Push-з\'єднання недоступне — панель запитує сервер кожні 3 с';
+  }
+}
+function serverReachable(ok) { if (reachable !== ok) { reachable = ok; updateLive(); } }
+
+function connectPush() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/hubs/panel');
+  let ping = null;
+  ws.onopen = () => ws.send(JSON.stringify({ protocol: 'json', version: 1 }) + RS);
+  ws.onmessage = ev => {
+    for (const part of String(ev.data).split(RS)) {
+      if (!part) continue;
+      const m = JSON.parse(part);
+      if (m.type === undefined) {                       // відповідь на рукостискання
+        if (m.error) { ws.close(); return; }
+        live = true; liveSince = new Date(); updateLive();
+        ping = setInterval(() => ws.readyState === 1 && ws.send('{"type":6}' + RS), 15000);
+        refreshAll();                                   // могли пропустити зміни, поки не було з'єднання
+      } else if (m.type === 1 && m.target === 'Changed') {
+        pushCount++; updateLive();
+        load(m.arguments[0]);
+      } else if (m.type === 7) {                        // сервер закриває з'єднання
+        ws.close();
+      }
+    }
+  };
+  ws.onclose = () => {
+    clearInterval(ping);
+    if (live) { live = false; updateLive(); }
+    setTimeout(connectPush, 3000);
+  };
+}
+
+// Резервне опитування — лише поки push-з'єднання немає
+setInterval(() => { if (!live) refreshAll(); }, 3000);
+
+// ---------- Вкладки ----------
+
+let currentTab = 'pcs';
+let reportsLoaded = false;
+
+function showTab(tab) {
+  const link = document.querySelector(`#tabs a[data-tab="${tab}"]`);
+  if (!link || link.classList.contains('hidden')) tab = 'pcs';
+  currentTab = tab;
+  document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
+  document.querySelectorAll('.wrap > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + tab));
+  if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+  if (tab === 'events' && eventsStale) refreshEvents();
+  if (tab === 'reports' && !reportsLoaded) {
+    reportsLoaded = true;
+    const frame = document.getElementById('reportsFrame');
+    frame.onload = () => {
+      // Висота вбудованих звітів підлаштовується під їхній вміст
+      const body = frame.contentDocument.body;
+      const fit = () => frame.style.height = (body.scrollHeight + 20) + 'px';
+      new ResizeObserver(fit).observe(body);
+      fit();
+    };
+    frame.src = '/reports.html';
+  }
+}
+document.querySelectorAll('#tabs a').forEach(a => a.onclick = e => { e.preventDefault(); showTab(a.dataset.tab); });
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
 // ---------- Старт ----------
 
 (async () => {
@@ -522,12 +934,12 @@ function renderRows(tbodyId, cols, rows, emptyText) {
   } catch { return; }
   document.getElementById('me').textContent =
     `${me.login} (${me.role === 'Owner' ? 'власник' : 'адміністратор зміни'})`;
-  if (me.role === 'Owner') {
-    document.getElementById('adminsSection').classList.remove('hidden');
-    document.getElementById('reportsLink').classList.remove('hidden');
-  }
-  refresh();
-  setInterval(refresh, 2000);
+  if (me.role === 'Owner')
+    document.querySelectorAll('#tabs a[data-owner]').forEach(a => a.classList.remove('hidden'));
+  updateLive();
+  showTab(location.hash.slice(1) || 'pcs');
+  await refreshAll();
+  connectPush();
 })();
 </script>
 </body>
