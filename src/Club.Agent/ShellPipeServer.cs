@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using Club.Shared;
+using Microsoft.Extensions.Options;
 
 namespace Club.Agent;
 
@@ -13,11 +14,12 @@ namespace Club.Agent;
 /// Права доступу: звичайні користувачі можуть тільки читати, тому програма
 /// в сеансі користувача не може надсилати службі жодних команд.
 /// </summary>
-public class ShellPipeServer(ILogger<ShellPipeServer> log) : BackgroundService
+public class ShellPipeServer(IOptions<AgentOptions> options, ILogger<ShellPipeServer> log) : BackgroundService
 {
     private readonly List<StreamWriter> _clients = new();
     private readonly object _lock = new();
-    private ShellMessage _state = new(Locked: true, SessionEndsAt: null); // за замовчуванням — заблоковано
+    // За замовчуванням — заблоковано; список очищення профілю оболонка отримує разом зі станом
+    private ShellMessage _state = new(Locked: true, SessionEndsAt: null, Cleanup: options.Value.SessionCleanup.ToList());
 
     /// <summary>Змінити стан і повідомити всі підключені оболонки.</summary>
     public void SetState(bool locked, DateTime? sessionEndsAt, string? text, SessionKind kind)

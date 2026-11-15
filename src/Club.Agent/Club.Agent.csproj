@@ -5,7 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Club.Agent</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>1.1.0</Version>
+    <!-- Версія з датою й часом збірки, щоб у панелі було видно, на якому ПК стара версія агента -->
+    <InformationalVersion>1.1.0+$([System.DateTime]::Now.ToString("yyyy.MM.dd-HH.mm"))</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

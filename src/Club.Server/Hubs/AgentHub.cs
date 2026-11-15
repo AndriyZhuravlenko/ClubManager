@@ -41,6 +41,7 @@ public class AgentHub(AppDb db, ConnectionRegistry registry, SessionService sess
             db.Pcs.Add(pc);
         }
         pc.LastSeen = DateTime.UtcNow;
+        pc.AgentVersion = hello.AgentVersion;
         await db.SaveChangesAsync();
 
         registry.Add(pc.Id, Context.ConnectionId);

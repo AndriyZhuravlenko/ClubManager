@@ -14,6 +14,7 @@ public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<AppEntry> Apps => Set<AppEntry>();
     public DbSet<Setting> Settings => Set<Setting>();
     public DbSet<TopUp> TopUps => Set<TopUp>();
+    public DbSet<BlockedApp> BlockedApps => Set<BlockedApp>();
 
     /// <summary>
     /// Створює таблиці, що з'явилися в новій версії, не чіпаючи наявних даних
@@ -29,6 +30,9 @@ public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             CREATE TABLE IF NOT EXISTS "Settings" (
                 "Key" TEXT NOT NULL CONSTRAINT "PK_Settings" PRIMARY KEY,
                 "Value" TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS "BlockedApps" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_BlockedApps" PRIMARY KEY AUTOINCREMENT,
+                "Pattern" TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS "TopUps" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_TopUps" PRIMARY KEY AUTOINCREMENT,
                 "ClientId" INTEGER NOT NULL,
@@ -41,6 +45,13 @@ public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         AddColumnIfMissing("Sessions", "ServiceAdmin", "TEXT NULL");
         AddColumnIfMissing("Sessions", "LockedAt", "TEXT NULL");
         AddColumnIfMissing("Sessions", "PausedSeconds", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing("Pcs", "AgentVersion", "TEXT NULL");
+
+        // Індекси для наявних баз (у нових їх створює EnsureCreated з тими самими назвами)
+        Database.ExecuteSqlRaw("""
+            CREATE INDEX IF NOT EXISTS "IX_Events_At" ON "Events" ("At");
+            CREATE INDEX IF NOT EXISTS "IX_Events_PcId" ON "Events" ("PcId");
+            """);
     }
 
     // SQLite не має "ADD COLUMN IF NOT EXISTS", тому спершу перевіряємо, чи стовпець уже є
@@ -66,6 +77,9 @@ public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         b.Entity<Client>().HasIndex(c => c.Login).IsUnique();
         b.Entity<Session>().HasIndex(s => new { s.PcId, s.ClosedAt });
         b.Entity<Setting>().HasKey(s => s.Key);
+        // Індекси журналу: фільтр за ПК, очищення старих записів за датою
+        b.Entity<EventLog>().HasIndex(e => e.At);
+        b.Entity<EventLog>().HasIndex(e => e.PcId);
     }
 
     /// <summary>Додати запис у журнал (зберігається разом з наступним SaveChanges).</summary>

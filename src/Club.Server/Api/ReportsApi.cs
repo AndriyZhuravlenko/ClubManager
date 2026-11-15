@@ -120,7 +120,8 @@ public static partial class ReportsApi
 
             var violationEvents = events
                 .Where(e => e.Actor == "агент" &&
-                            (e.Text.StartsWith("Закрито недозволену програму") || e.Text.StartsWith("Запущено програму поза каталогом")))
+                            (e.Text.StartsWith("Закрито недозволену програму") || e.Text.StartsWith("Закрито заборонену програму")
+                             || e.Text.StartsWith("Запущено програму поза каталогом")))
                 .ToList();
             var violations = new
             {

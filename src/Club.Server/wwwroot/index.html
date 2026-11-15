@@ -17,6 +17,13 @@
   .busy { background: #dbeafe; color: #1e40af; }
   .free { background: #fef9c3; color: #854d0e; }
   .bad { background: #fee2e2; color: #991b1b; }
+  .cat-admin  { background: #ede9fe; color: #5b21b6; }
+  .cat-client { background: #dbeafe; color: #1e40af; }
+  .cat-agent  { background: #ffedd5; color: #9a3412; }
+  .cat-system { background: #e7e5e4; color: #44403c; }
+  .cat-other  { background: #f5f5f4; color: #57534e; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .filters select, .filters input { padding: 4px 6px; font-size: 13px; }
   button { margin: 2px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
   .muted { color: #78716c; font-size: 12px; }
   #events td { font-size: 13px; }
@@ -60,6 +67,18 @@
   <tbody id="apps"></tbody>
 </table>
 
+<h2>Заборонені програми
+  <button onclick="newBlocked()">+ Заборонити</button>
+  <button onclick="addRecommendedBlocked()">Додати рекомендовані</button></h2>
+<p class="muted" style="margin:0 0 8px">
+  Закриваються завжди — у будь-якому режимі контролю і навіть на екрані блокування (крім службових сеансів адміністратора).
+  Вкажіть ім'я файлу (<b>taskmgr.exe</b>, можна з * : <b>cheat*.exe</b>) або повний шлях до файлу чи папки.
+</p>
+<table>
+  <thead><tr><th>Ім'я або шлях</th><th>Дії</th></tr></thead>
+  <tbody id="blocked"></tbody>
+</table>
+
 <section id="adminsSection" class="hidden">
   <h2>Адміністратори <button onclick="newAdmin()">+ Новий адміністратор</button></h2>
   <table>
@@ -69,7 +88,25 @@
 </section>
 
 <h2>Журнал подій</h2>
-<table id="events"><tbody></tbody></table>
+<div class="filters">
+  ПК: <select id="fPc" onchange="refreshEvents()"><option value="">усі</option><option value="none">панель (без ПК)</option></select>
+  Хто: <select id="fCat" onchange="refreshEvents()">
+    <option value="">усі</option>
+    <option value="admin">адміністратори</option>
+    <option value="client">клієнти</option>
+    <option value="agent">агенти ПК</option>
+    <option value="system">система</option>
+  </select>
+  Пошук: <input id="fText" placeholder="текст або логін" oninput="refreshEventsSoon()">
+  Показати: <select id="fTake" onchange="refreshEvents()">
+    <option>100</option><option>300</option><option>1000</option>
+  </select>
+  <button onclick="resetFilters()">Скинути</button>
+</div>
+<table id="events">
+  <thead><tr><th>Час</th><th>ПК</th><th>Хто</th><th>Подія</th></tr></thead>
+  <tbody></tbody>
+</table>
 
 <!-- Власне діалогове вікно замість alert/confirm/prompt браузера -->
 <div id="dlg" class="dlg hidden">
@@ -269,6 +306,27 @@ async function toggleMode() {
   if (await dialog(q) && await api('POST', '/api/apps/mode', { enforce: !enforce })) refresh();
 }
 
+// ---------- Чорний список ----------
+
+let blockedNames = {};
+const recommendedBlocked = ['taskmgr.exe', 'regedit.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'mmc.exe'];
+async function newBlocked() {
+  const pattern = await dialog('Ім\'я файлу (напр. taskmgr.exe, cheat*.exe) або повний шлях до файлу чи папки:', 'prompt');
+  if (pattern && await api('POST', '/api/blocked', { pattern })) refresh();
+}
+async function addRecommendedBlocked() {
+  const q = 'Заборонити для клієнтів: ' + recommendedBlocked.join(', ') + '? ' +
+            'Це диспетчер задач, редактор реєстру, командний рядок, PowerShell і консоль керування.';
+  if (!await dialog(q)) return;
+  const existing = Object.values(blockedNames).map(p => p.toLowerCase());
+  for (const pattern of recommendedBlocked)
+    if (!existing.includes(pattern)) await api('POST', '/api/blocked', { pattern });
+  refresh();
+}
+async function deleteBlocked(id) {
+  if (await dialog(`Прибрати «${blockedNames[id]}» з чорного списку?`) && await api('DELETE', `/api/blocked/${id}`)) refresh();
+}
+
 // ---------- Адміністратори ----------
 
 let adminNames = {};
@@ -285,12 +343,71 @@ async function deleteAdmin(id) {
   if (await dialog(`Видалити адміністратора «${adminNames[id]}»?`) && await api('DELETE', `/api/admins/${id}`)) refresh();
 }
 
+// ---------- Журнал подій ----------
+
+const catNames = { admin: 'адмін', client: 'клієнт', agent: 'агент', system: 'система', other: 'інше' };
+
+function updatePcFilter(pcs) {
+  const select = document.getElementById('fPc');
+  const current = select.value;
+  const wanted = ['', 'none', ...pcs.map(p => String(p.id))].join(',');
+  if (select.dataset.ids === wanted) return;            // список ПК не змінився
+  select.innerHTML = '<option value="">усі</option><option value="none">панель (без ПК)</option>' +
+    pcs.map(p => `<option value="${p.id}">${esc(p.displayName)}</option>`).join('');
+  select.value = current;
+  select.dataset.ids = wanted;
+}
+
+let eventsTimer = null;
+function refreshEventsSoon() {
+  clearTimeout(eventsTimer);
+  eventsTimer = setTimeout(refreshEvents, 300);
+}
+
+async function refreshEvents() {
+  const params = new URLSearchParams();
+  const pc = document.getElementById('fPc').value;
+  const cat = document.getElementById('fCat').value;
+  const text = document.getElementById('fText').value.trim();
+  if (pc) params.set('pc', pc);
+  if (cat) params.set('category', cat);
+  if (text) params.set('q', text);
+  params.set('take', document.getElementById('fTake').value);
+
+  const events = await getJson('/api/events?' + params);
+  const html = events.map(e =>
+    `<tr><td class="muted" style="white-space:nowrap">${new Date(e.at).toLocaleString('uk-UA')}</td>` +
+    `<td>${e.pcId ? `<a href="#" onclick="filterPc(${e.pcId}); return false;">${esc(e.pc)}</a>` : esc(e.pc)}</td>` +
+    `<td><span class="badge cat-${e.category}">${catNames[e.category] || ''}</span>` +
+    `${e.category === 'agent' || e.category === 'system' ? '' : ' ' + esc(e.actor)}</td>` +
+    `<td>${esc(e.text)}</td></tr>`).join('') ||
+    '<tr><td colspan="4" class="muted">Немає подій за цими фільтрами</td></tr>';
+  const tbody = document.querySelector('#events tbody');
+  if (tbody._html !== html) { tbody.innerHTML = html; tbody._html = html; }
+}
+
+function filterPc(id) {
+  document.getElementById('fPc').value = String(id);
+  refreshEvents();
+  document.getElementById('events').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetFilters() {
+  document.getElementById('fPc').value = '';
+  document.getElementById('fCat').value = '';
+  document.getElementById('fText').value = '';
+  document.getElementById('fTake').value = '100';
+  refreshEvents();
+}
+
 // ---------- Оновлення сторінки ----------
 
 async function refresh() {
   try {
     const pcs = await getJson('/api/pcs');
     pcNames = Object.fromEntries(pcs.map(p => [p.id, p.displayName]));
+    // Найновіша версія агента серед ПК; ПК зі старішою версією позначаються
+    const newestAgent = pcs.map(p => p.agentVersion || '').sort().pop() || '';
     renderRows('pcs', 6, pcs.map(p => {
       const s = p.session;
       const net = p.online ? '<span class="badge on">онлайн</span>' : '<span class="badge off">офлайн</span>';
@@ -313,8 +430,13 @@ async function refresh() {
         <button ${dis} onclick="sendCommand(${p.id}, 'Reboot')">Перезавантажити</button>
         <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button>`;
       const agent = p.online && p.agent ? ` · агент: ${p.agent.cpuPercent}% CPU, ${p.agent.memoryMb} МБ` : '';
-      const name = `<b>${esc(p.displayName)}</b> <a href="#" onclick="rename(${p.id}); return false;">✎</a>
-            <div class="muted">${esc(p.machineName)}${agent}</div>`;
+      const version = p.agentVersion
+        ? `<div class="muted">версія ${esc(p.agentVersion)}${p.agentVersion !== newestAgent
+            ? ' <span class="badge bad" title="На іншому ПК встановлено новішу версію агента">стара версія</span>' : ''}</div>`
+        : '';
+      const name = `<b>${esc(p.displayName)}</b> <a href="#" onclick="rename(${p.id}); return false;" title="Перейменувати">✎</a>
+            <a href="#" onclick="filterPc(${p.id}); return false;" style="font-size:12px">журнал</a>
+            <div class="muted">${esc(p.machineName)}${agent}</div>${version}`;
       return { id: p.id, cells: [name, net, ses, left, sesBtns, cmdBtns] };
     }), 'Поки що жоден ПК не підключався. Запустіть агента на віртуальній машині.');
 
@@ -343,6 +465,13 @@ async function refresh() {
       cells: [`<b>${esc(a.name)}</b>`, `<span class="muted">${esc(a.path)}</span>`, `<button onclick="deleteApp(${a.id})">Прибрати</button>`]
     })), 'Каталог порожній — додайте програми, які клієнти можуть запускати');
 
+    const blocked = await getJson('/api/blocked');
+    blockedNames = Object.fromEntries(blocked.map(b => [b.id, b.pattern]));
+    renderRows('blocked', 2, blocked.map(b => ({
+      id: b.id,
+      cells: [`<b>${esc(b.pattern)}</b>`, `<button onclick="deleteBlocked(${b.id})">Прибрати</button>`]
+    })), 'Чорний список порожній');
+
     if (me && me.role === 'Owner') {
       const admins = await getJson('/api/admins');
       adminNames = Object.fromEntries(admins.map(a => [a.id, a.login]));
@@ -353,10 +482,8 @@ async function refresh() {
       })), '');
     }
 
-    const events = await getJson('/api/events');
-    document.querySelector('#events tbody').innerHTML = events.map(e =>
-      `<tr><td class="muted">${new Date(e.at).toLocaleString('uk-UA')}</td><td>${esc(e.pc)}</td><td>${esc(e.actor)}</td><td>${esc(e.text)}</td></tr>`
-    ).join('');
+    updatePcFilter(pcs);
+    await refreshEvents();
   } catch (err) {
     if (String(err.message) === '401') return;
     const tbody = document.getElementById('pcs');

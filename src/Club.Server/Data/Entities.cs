@@ -10,6 +10,7 @@ public class Pc
     public string MachineName { get; set; } = "";   // ім'я комп'ютера в Windows
     public string DisplayName { get; set; } = "";   // назва для адміністратора, напр. "ПК-01"
     public DateTime LastSeen { get; set; }           // останній heartbeat
+    public string? AgentVersion { get; set; }        // версія агента з датою збірки
 }
 
 /// <summary>Ролі адміністраторів (рольова модель доступу, RBAC).</summary>
@@ -73,6 +74,13 @@ public class TopUp
     public int Minutes { get; set; }
     public DateTime At { get; set; }
     public string? Actor { get; set; }               // адміністратор, який поповнив
+}
+
+/// <summary>Програма в чорному списку (закривається завжди, крім службових сеансів).</summary>
+public class BlockedApp
+{
+    public int Id { get; set; }
+    public string Pattern { get; set; } = "";        // "taskmgr.exe", "cheat*.exe" або "C:\Games\Old\"
 }
 
 /// <summary>Налаштування системи (ключ — значення).</summary>

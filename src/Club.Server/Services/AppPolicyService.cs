@@ -19,7 +19,8 @@ public class AppPolicyService(AppDb db, IHubContext<AgentHub> hub)
         var apps = await db.Apps.OrderBy(a => a.Name)
             .Select(a => new AppInfo(a.Id, a.Name, a.Path)).ToListAsync();
         var enforce = (await db.Settings.FindAsync(EnforceKey))?.Value == "true";
-        return new AppPolicy(enforce, apps);
+        var blocked = await db.BlockedApps.OrderBy(b => b.Pattern).Select(b => b.Pattern).ToListAsync();
+        return new AppPolicy(enforce, apps, blocked);
     }
 
     public async Task SetEnforceAsync(bool enforce)

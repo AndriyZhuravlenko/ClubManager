@@ -16,6 +16,7 @@ public record PasswordRequest(string? Password);
 public record BlockRequest(bool Blocked);
 public record NewAppRequest(string? Name, string? Path);
 public record EnforceRequest(bool Enforce);
+public record BlockRequestPattern(string? Pattern);
 
 /// <summary>REST API для панелі адміністратора. Усі методи вимагають входу.</summary>
 public static class AdminApi
@@ -43,6 +44,7 @@ public static class AdminApi
                     p.MachineName,
                     Online = registry.IsOnline(p.Id),
                     p.LastSeen,
+                    p.AgentVersion,
                     Agent = registry.GetMetrics(p.Id),
                     Session = s == null ? null : new
                     {
@@ -233,17 +235,99 @@ public static class AdminApi
             return Results.Ok();
         }).RequireAuthorization("Owner");
 
+        // ---------- Чорний список програм ----------
+
+        api.MapGet("/blocked", async (AppDb db) =>
+            await db.BlockedApps.OrderBy(b => b.Pattern).Select(b => new { b.Id, b.Pattern }).ToListAsync());
+
+        api.MapPost("/blocked", async (BlockRequestPattern req, AppDb db, AppPolicyService policy, ClaimsPrincipal user) =>
+        {
+            var pattern = req.Pattern?.Trim().Trim('"') ?? "";
+            if (pattern.Length is 0 or > 260) return Results.BadRequest(new { error = "Вкажіть ім'я файлу або шлях" });
+            if (pattern.Contains('\\'))
+            {
+                if (!System.IO.Path.IsPathFullyQualified(pattern))
+                    return Results.BadRequest(new { error = @"Шлях має бути повним, напр. C:\Games\Old\ або C:\Tools\app.exe" });
+            }
+            else if (!pattern.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.BadRequest(new { error = "Ім'я файлу має закінчуватися на .exe, напр. taskmgr.exe або cheat*.exe" });
+            }
+            if (await db.BlockedApps.AnyAsync(b => b.Pattern == pattern))
+                return Results.BadRequest(new { error = "Вже є в чорному списку" });
+
+            db.BlockedApps.Add(new BlockedApp { Pattern = pattern });
+            db.Log(null, $"Додано до чорного списку: {pattern}", user.Identity!.Name);
+            await db.SaveChangesAsync();
+            await policy.BroadcastAsync();
+            return Results.Ok();
+        });
+
+        api.MapDelete("/blocked/{id:int}", async (int id, AppDb db, AppPolicyService policy, ClaimsPrincipal user) =>
+        {
+            var entry = await db.BlockedApps.FindAsync(id);
+            if (entry == null) return Results.NotFound(new { error = "Не знайдено" });
+            db.BlockedApps.Remove(entry);
+            db.Log(null, $"Прибрано з чорного списку: {entry.Pattern}", user.Identity!.Name);
+            await db.SaveChangesAsync();
+            await policy.BroadcastAsync();
+            return Results.Ok();
+        });
+
         // ---------- Журнал ----------
 
-        api.MapGet("/events", async (AppDb db) =>
+        // Фільтри: pc — "none" (події без ПК: панель, облікові записи) або Id ПК;
+        // category — admin | client | agent | system; q — пошук у тексті; take — скільки записів
+        api.MapGet("/events", async (string? pc, string? category, string? q, int? take, AppDb db) =>
         {
             var names = await db.Pcs.ToDictionaryAsync(p => p.Id, p => p.DisplayName);
-            var events = await db.Events.OrderByDescending(e => e.Id).Take(100).ToListAsync();
+            var adminLogins = await db.Admins.Select(a => a.Login).ToListAsync();
+            var clientLogins = await db.Clients.Select(c => c.Login).ToListAsync();
+
+            IQueryable<EventLog> query = db.Events;
+            if (pc == "none") query = query.Where(e => e.PcId == null);
+            else if (int.TryParse(pc, out var pcId)) query = query.Where(e => e.PcId == pcId);
+
+            query = category switch
+            {
+                "admin" => query.Where(e => e.Actor != null && adminLogins.Contains(e.Actor)),
+                "client" => query.Where(e => e.Actor != null && clientLogins.Contains(e.Actor)),
+                "agent" => query.Where(e => e.Actor == "агент"),
+                "system" => query.Where(e => e.Actor == null),
+                _ => query
+            };
+
+            var limit = Math.Clamp(take ?? 100, 10, 1000);
+            List<EventLog> events;
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                events = await query.OrderByDescending(e => e.Id).Take(limit).ToListAsync();
+            }
+            else
+            {
+                // SQLite не порівнює кирилицю без урахування регістру, тому шукаємо в пам'яті
+                // серед останніх 5000 подій, що пройшли інші фільтри
+                var text = q.Trim();
+                events = (await query.OrderByDescending(e => e.Id).Take(5000).ToListAsync())
+                    .Where(e => e.Text.Contains(text, StringComparison.CurrentCultureIgnoreCase)
+                             || (e.Actor ?? "").Contains(text, StringComparison.CurrentCultureIgnoreCase))
+                    .Take(limit).ToList();
+            }
+
+            string CategoryOf(string? actor) =>
+                actor == null ? "system"
+                : actor == "агент" ? "agent"
+                : adminLogins.Contains(actor) ? "admin"
+                : clientLogins.Contains(actor) ? "client"
+                : "other";
+
             return events.Select(e => new
             {
                 e.At,
+                e.PcId,
                 Pc = e.PcId != null && names.TryGetValue(e.PcId.Value, out var n) ? n : "—",
                 Actor = e.Actor ?? "система",
+                Category = CategoryOf(e.Actor),
                 e.Text
             });
         });

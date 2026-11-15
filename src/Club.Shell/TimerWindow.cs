@@ -8,10 +8,17 @@ using Club.Shared;
 
 namespace Club.Shell;
 
-/// <summary>Невелике вікно в правому верхньому куті: скільки часу залишилось + кнопка завершення.</summary>
+/// <summary>
+/// Компактний таймер у кутку екрана. У звичайному стані — лише напівпрозорий час;
+/// кнопки «Програми» і «Завершити» з'являються, коли навести мишу. Таймер можна
+/// перетягнути мишею в будь-яке місце екрана.
+/// </summary>
 public class TimerWindow : Window
 {
-    private readonly TextBlock _text = new() { FontSize = 18, Foreground = Brushes.White, Margin = new Thickness(14, 8, 14, 8) };
+    private readonly TextBlock _text = new() { FontSize = 15, Foreground = Brushes.White, Margin = new Thickness(10, 5, 10, 5), VerticalAlignment = VerticalAlignment.Center };
+    private readonly StackPanel _buttons = new() { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed };
+    private readonly DispatcherTimer _collapse = new() { Interval = TimeSpan.FromSeconds(1.5) };
+    private double? _anchorRight;   // правий край вікна: при розгортанні вікно росте ліворуч, не виходячи за екран
     private readonly Border _border;
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTime? _endsAtUtc;
@@ -35,23 +42,59 @@ public class TimerWindow : Window
         Background = Brushes.Transparent;
         AllowsTransparency = true;
 
-        var finish = new Button { Content = "Завершити", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 6, 10, 6), Focusable = false };
+        var finish = new Button { Content = "Завершити", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 4, 8, 4), Focusable = false };
         finish.Click += async (_, _) => await FinishAsync();
 
-        var apps = new Button { Content = "Програми", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 6, 6, 6), Focusable = false };
+        var apps = new Button { Content = "Програми", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 4, 6, 4), Focusable = false };
         apps.Click += (_, _) => LauncherWindow.ShowLauncher();
+
+        _buttons.Children.Add(apps);
+        _buttons.Children.Add(finish);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(_text);
-        row.Children.Add(apps);
-        row.Children.Add(finish);
+        row.Children.Add(_buttons);
 
-        _border = new Border { Child = row, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x1C, 0x19, 0x17)) };
+        _border = new Border
+        {
+            Child = row,
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x1C, 0x19, 0x17)),
+            Cursor = System.Windows.Input.Cursors.SizeAll,
+            ToolTip = "Наведіть, щоб побачити кнопки. Перетягніть, щоб перемістити."
+        };
         Content = _border;
+        Opacity = 0.6;
+
+        // Наведення миші — показати кнопки; мишу прибрали — через 1,5 с згорнути
+        MouseEnter += (_, _) => { _collapse.Stop(); Expand(true); };
+        MouseLeave += (_, _) => _collapse.Start();
+        _collapse.Tick += (_, _) => { _collapse.Stop(); Expand(false); };
+
+        // Перетягування мишею
+        _border.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.OriginalSource is DependencyObject source && FindButton(source)) return;
+            DragMove();
+            _anchorRight = Left + ActualWidth;
+        };
 
         _tick.Tick += (_, _) => Refresh();
-        Loaded += (_, _) => PlaceTopRight();
-        SizeChanged += (_, _) => PlaceTopRight();
+        Loaded += (_, _) => PlaceInitially();
+        SizeChanged += (_, _) => KeepRightEdge();
+    }
+
+    private void Expand(bool expanded)
+    {
+        _buttons.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        Opacity = expanded ? 1.0 : 0.6;
+    }
+
+    private static bool FindButton(DependencyObject element)
+    {
+        for (var e = element; e != null; e = VisualTreeHelper.GetParent(e))
+            if (e is Button) return true;
+        return false;
     }
 
     public void Start(DateTime? endsAtUtc, SessionKind kind)
@@ -153,11 +196,21 @@ public class TimerWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
-    private void PlaceTopRight()
+    // Спочатку — правий верхній кут; далі вікно тримає свій правий край на місці
+    private void PlaceInitially()
     {
+        if (_anchorRight != null) return;
         var area = SystemParameters.WorkArea;
-        Left = area.Right - ActualWidth - 16;
-        Top = area.Top + 16;
+        _anchorRight = area.Right - 12;
+        Top = area.Top + 12;
+        KeepRightEdge();
+    }
+
+    private void KeepRightEdge()
+    {
+        if (_anchorRight == null) return;
+        var area = SystemParameters.WorkArea;
+        Left = Math.Max(area.Left, _anchorRight.Value - ActualWidth);
     }
 
     protected override void OnClosing(CancelEventArgs e)

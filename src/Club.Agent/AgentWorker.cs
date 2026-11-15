@@ -23,10 +23,19 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
     /// <summary>Сеанс почався (true) або закінчився (false).</summary>
     public event Action<bool>? SessionActiveChanged;
 
+    /// <summary>Клієнтський або гостьовий сеанс щойно завершився (ПК заблоковано).</summary>
+    public event Action? SessionEnded;
+
     /// <summary>Сервер надіслав нову політику доступу до програм.</summary>
     public event Action<AppPolicy>? PolicyReceived;
 
     public bool IsSessionActive => !_locked;
+
+    /// <summary>Вид поточного сеансу (None — ПК заблоковано або розблоковано вручну без сеансу).</summary>
+    public SessionKind CurrentKind => _locked ? SessionKind.None : _kind;
+
+    /// <summary>Чи заблоковано зараз робоче місце.</summary>
+    public bool IsLocked => _locked;
 
     // Вид поточного сеансу (службовий — без таймера і без контролю програм)
     private SessionKind _kind = SessionKind.None;
@@ -53,7 +62,7 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
     {
         var o = options.Value;
         log.LogInformation("Агент запущено: версія {Version}, PID {Pid}, сервер {Url}",
-            typeof(AgentWorker).Assembly.GetName().Version, Environment.ProcessId, o.ServerUrl);
+            AgentVersion, Environment.ProcessId, o.ServerUrl);
         var hubUrl = o.ServerUrl.TrimEnd('/') + "/hubs/agent";
 
         _connection = new HubConnectionBuilder()
@@ -247,9 +256,17 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
         catch (Exception ex) { log.LogWarning("Не вдалося надіслати подію: {Message}", ex.Message); }
     }
 
+    /// <summary>Версія агента разом із датою збірки, напр. "1.1.0+2026.11.15-19.20".</summary>
+    private static readonly string AgentVersion =
+        typeof(AgentWorker).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion
+        ?? typeof(AgentWorker).Assembly.GetName().Version?.ToString() ?? "?";
+
     private async Task RegisterAsync(CancellationToken ct)
     {
-        var version = typeof(AgentWorker).Assembly.GetName().Version?.ToString() ?? "0.1";
+        var version = AgentVersion;
         var pcId = await _connection!.InvokeAsync<int>(HubMethods.Register,
             new AgentHello(Environment.MachineName, version), ct);
         log.LogInformation("Зареєстровано на сервері, Id ПК = {Id}", pcId);
@@ -282,12 +299,15 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
         switch (cmd.Type)
         {
             case CommandType.Lock:
+                // Чи завершився щойно звичайний (не службовий) сеанс — тоді прибираємо за користувачем
+                var userSessionEnded = !_locked && _kind != SessionKind.Service;
                 _locked = true;
                 _offlineOwner = false;
                 _kind = SessionKind.None;
                 _sessionEndsAt = null;
                 shell.SetState(true, null, cmd.Text, SessionKind.None);
                 SessionActiveChanged?.Invoke(false);
+                if (userSessionEnded) SessionEnded?.Invoke();
                 log.LogInformation(">>> РОБОЧЕ МІСЦЕ ЗАБЛОКОВАНО");
                 break;
 

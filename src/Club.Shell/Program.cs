@@ -68,9 +68,22 @@ public static class Program
         }
     }
 
+    // Для очищення профілю: чи було робоче місце розблоковане і який був вид сеансу
+    private static bool _firstMessage = true;
+    private static bool _wasUnlocked;
+    private static SessionKind _lastKind = SessionKind.None;
+
     private static void Apply(ShellMessage m)
     {
         if (m.Apps != null) LauncherWindow.SetApps(m.Apps);
+
+        // Очищення профілю: після завершення звичайного (не службового) сеансу, а також
+        // одразу після запуску оболонки в заблокованому стані (якщо попередній сеанс обірвався)
+        if (m.Locked && ((_wasUnlocked && _lastKind != SessionKind.Service) || _firstMessage))
+            SessionCleanup.RunInBackground(m.Cleanup);
+        _firstMessage = false;
+        _wasUnlocked = !m.Locked;
+        if (!m.Locked) _lastKind = m.Kind;
 
         // Якщо ПК заблоковано — текст повідомлення показуємо на екрані блокування,
         // якщо розблоковано — окремим вікном поверх гри.

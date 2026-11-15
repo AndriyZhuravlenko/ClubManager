@@ -37,10 +37,11 @@ public enum CommandType
 /// <summary>
 /// Повідомлення від агента (служби) до оболонки користувача через named pipe.
 /// Locked — чи показувати екран блокування; SessionEndsAt — для таймера (UTC);
-/// Text — повідомлення, яке треба показати користувачу (якщо є).
+/// Text — повідомлення, яке треба показати користувачу (якщо є);
+/// Cleanup — що видаляти з профілю користувача після сеансу (дані входу, особисті файли).
 /// </summary>
 public record ShellMessage(bool Locked, DateTime? SessionEndsAt, string? Text = null, List<AppInfo>? Apps = null,
-    SessionKind Kind = SessionKind.None)
+    SessionKind Kind = SessionKind.None, List<string>? Cleanup = null)
 {
     public const string PipeName = "ClubAgentShell";       // агент -> оболонка (стан), лише читання
     public const string LoginPipeName = "ClubAgentLogin";  // оболонка -> агент (вхід/вихід клієнта)
@@ -52,8 +53,10 @@ public record AppInfo(int Id, string Name, string Path);
 /// <summary>
 /// Політика доступу до програм. Enforce = false — режим спостереження (порушення лише
 /// записуються в журнал), true — недозволені програми закриваються.
+/// Blocked — чорний список: ці програми закриваються завжди, в будь-якому режимі
+/// (ім'я файлу, можна з * і ?, або повний шлях до файлу чи папки).
 /// </summary>
-public record AppPolicy(bool Enforce, List<AppInfo> Apps);
+public record AppPolicy(bool Enforce, List<AppInfo> Apps, List<string>? Blocked = null);
 
 /// <summary>
 /// Дані для входу власника, коли сервер недоступний: логін і PBKDF2-хеш пароля

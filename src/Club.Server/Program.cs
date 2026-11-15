@@ -42,6 +42,7 @@ builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<AppPolicyService>();
 builder.Services.AddScoped<OwnerCredentialsService>();
 builder.Services.AddHostedService<SessionWatcher>();
+builder.Services.AddHostedService<MaintenanceService>();
 
 // Автентифікація адміністраторів: захищений cookie після входу за логіном і паролем
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
