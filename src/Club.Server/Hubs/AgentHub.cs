@@ -12,7 +12,7 @@ namespace Club.Server.Hubs;
 /// а агент — свій стан.
 /// </summary>
 public class AgentHub(AppDb db, ConnectionRegistry registry, SessionService sessions, AppPolicyService policy,
-    OwnerCredentialsService owners, AgentCommander commander,
+    OwnerCredentialsService owners, AgentCommander commander, PanelNotifier notifier,
     IConfiguration config, ILogger<AgentHub> log) : Hub
 {
     /// <summary>Група SignalR, до якої додаються лише агенти, що пройшли перевірку ключа.</summary>
@@ -69,15 +69,17 @@ public class AgentHub(AppDb db, ConnectionRegistry registry, SessionService sess
     }
 
     /// <summary>Агент викликає кожні 15 секунд: "я живий" + власне навантаження на ПК.</summary>
-    public async Task Heartbeat(double cpuPercent, double memoryMb)
+    public Task Heartbeat(double cpuPercent, double memoryMb)
     {
         // Id ПК збережено в даних з'єднання під час Register
-        if (!Context.Items.TryGetValue("pcId", out var value) || value is not int pcId) return;
+        if (!Context.Items.TryGetValue("pcId", out var value) || value is not int pcId) return Task.CompletedTask;
+        // Оптимізація: heartbeat не пише в базу. Час сигналу запам'ятовується в пам'яті,
+        // а HeartbeatFlusher записує всі ПК одним пакетом раз на 5 с. SQLite виконує записи
+        // по черзі, тож окремий запис на кожен heartbeat при багатьох ПК створював чергу.
         registry.SetMetrics(pcId, new AgentMetrics(cpuPercent, memoryMb, DateTime.UtcNow));
-        var pc = await db.Pcs.FindAsync(pcId);
-        if (pc == null) return;
-        pc.LastSeen = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        registry.Touch(pcId);
+        notifier.Notify("pcs");     // панель оновить навантаження агента
+        return Task.CompletedTask;
     }
 
     /// <summary>Клієнт вводить логін і пароль на екрані блокування (через агента).</summary>
@@ -135,7 +137,15 @@ public class AgentHub(AppDb db, ConnectionRegistry registry, SessionService sess
             // Момент зникнення ПК — до нього списується час, якщо ПК не повернеться
             if (await db.Pcs.FindAsync(pcId.Value) is { } pc) pc.LastSeen = DateTime.UtcNow;
             db.Log(pcId, "ПК відключився");
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // ПК щойно видалили з панелі (між відключенням і цим записом) — записувати нічого
+                log.LogDebug("ПК {PcId} видалено під час відключення", pcId);
+            }
         }
         await base.OnDisconnectedAsync(exception);
     }

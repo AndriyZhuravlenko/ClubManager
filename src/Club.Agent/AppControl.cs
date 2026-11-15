@@ -138,8 +138,7 @@ public class AppControl : BackgroundService
                 // 2. Білий список — лише під час сеансу
                 if (!whitelistActive) continue;
 
-                if (allowedFiles.Contains(path)) continue;
-                if (allowedFolders.Any(f => path.StartsWith(f, StringComparison.OrdinalIgnoreCase))) continue;
+                if (IsAllowed(path, allowedFiles, allowedFolders)) continue;
 
                 if (policy.Enforce)
                 {
@@ -238,7 +237,12 @@ public class AppControl : BackgroundService
         await _agent.ReportAsync(text);
     }
 
-    private static string NormalizeFolder(string folder) =>
+    /// <summary>Чи дозволено запуск: файл є в каталозі або лежить у дозволеній папці (папки — з "\" у кінці).</summary>
+    internal static bool IsAllowed(string path, ISet<string> allowedFiles, IEnumerable<string> allowedFolders) =>
+        allowedFiles.Contains(path) ||
+        allowedFolders.Any(f => path.StartsWith(f, StringComparison.OrdinalIgnoreCase));
+
+    internal static string NormalizeFolder(string folder) =>
         Path.GetFullPath(folder).TrimEnd('\\') + "\\";
 
     // --- Шлях до .exe процесу через Windows API (працює і для процесів інших користувачів) ---
@@ -294,8 +298,11 @@ internal sealed class BlockRule
         return new BlockRule(null, new Regex(regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
     }
 
+    // Шлях у правилі — це або сам файл, або папка. Порівнюємо по межі папки,
+    // щоб правило "C:\Games\Bad" не зачіпало сусідню "C:\Games\BadLuck".
     public bool Matches(string path, string fileName) =>
         _pathPrefix != null
-            ? path.StartsWith(_pathPrefix, StringComparison.OrdinalIgnoreCase)
+            ? path.Equals(_pathPrefix.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||
+              path.StartsWith(_pathPrefix.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
             : _name!.IsMatch(fileName);
 }

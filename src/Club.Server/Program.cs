@@ -44,6 +44,7 @@ builder.Services.AddScoped<AppPolicyService>();
 builder.Services.AddScoped<OwnerCredentialsService>();
 builder.Services.AddHostedService<SessionWatcher>();
 builder.Services.AddHostedService<MaintenanceService>();
+builder.Services.AddHostedService<HeartbeatFlusher>();
 
 // Автентифікація адміністраторів: захищений cookie після входу за логіном і паролем
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

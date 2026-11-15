@@ -109,6 +109,23 @@ public static class AdminApi
             return Results.Ok();
         });
 
+        // Прибрати ПК з панелі (списаний комп'ютер або тестові ПК після навантажувального тесту).
+        // Лише для власника і лише для ПК поза мережею. Історія сеансів лишається у звітах.
+        api.MapDelete("/pcs/{id:int}", async (int id, AppDb db, ConnectionRegistry registry, ClaimsPrincipal user) =>
+        {
+            var pc = await db.Pcs.FindAsync(id);
+            if (pc == null) return Results.NotFound(new { error = "ПК не знайдено" });
+            if (registry.IsOnline(id)) return Results.BadRequest(new { error = "ПК у мережі — спершу вимкніть його або видаліть агента" });
+            if (await db.Sessions.AnyAsync(s => s.PcId == id && s.ClosedAt == null))
+                return Results.BadRequest(new { error = "На ПК є незавершений сеанс" });
+
+            db.Events.RemoveRange(db.Events.Where(e => e.PcId == id));
+            db.Pcs.Remove(pc);
+            db.Log(null, $"ПК «{pc.DisplayName}» ({pc.MachineName}) видалено з панелі", user.Identity!.Name);
+            await db.SaveChangesAsync();
+            return Results.Ok();
+        }).RequireAuthorization("Owner");
+
         // ---------- Клієнти ----------
 
         api.MapGet("/clients", async (AppDb db) =>

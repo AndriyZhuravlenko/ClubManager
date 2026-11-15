@@ -715,6 +715,12 @@ async function groupStart() {
 
 // ---------- Діалог дій з одним ПК ----------
 
+async function deletePc(id) {
+  const q = `Видалити «${pcNames[id]}» з панелі? Записи журналу цього ПК буде видалено, історія сеансів у звітах залишиться. ` +
+            `Якщо агент на ньому знову підключиться, ПК з'явиться як новий.`;
+  if (await dialog(q) && await api('DELETE', `/api/pcs/${id}`)) { closePcDialog(); refresh(); }
+}
+
 function openPcDialog(id) {
   openPcId = id;
   document.getElementById('pcDlg').classList.remove('hidden');
@@ -753,7 +759,9 @@ function renderPcDialog() {
       <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button></div>` +
     `<div class="grp"><div class="lbl">Інше</div>
       <button onclick="rename(${p.id})">Перейменувати</button>
-      <button onclick="filterPc(${p.id})">Журнал цього ПК</button></div>`);
+      <button onclick="filterPc(${p.id})">Журнал цього ПК</button>` +
+      (me && me.role === 'Owner' && !p.online ? `<button onclick="deletePc(${p.id})">Видалити ПК з панелі</button>` : '') +
+    `</div>`);
   tickTimers();
 }
 

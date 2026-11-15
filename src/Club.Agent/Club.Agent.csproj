@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Модульні тести перевіряють внутрішні правила (чорний список, перевірку хешів) -->
+    <InternalsVisibleTo Include="Club.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Club.Shared\Club.Shared.csproj" />
   </ItemGroup>
 

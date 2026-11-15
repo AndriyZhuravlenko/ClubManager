@@ -37,6 +37,20 @@ public class ConnectionRegistry
     public void SetMetrics(int pcId, AgentMetrics metrics) => _metrics[pcId] = metrics;
 
     public AgentMetrics? GetMetrics(int pcId) => _metrics.TryGetValue(pcId, out var m) ? m : null;
+
+    // Час останнього heartbeat, ще не записаний у базу (записує пакетом HeartbeatFlusher)
+    private readonly ConcurrentDictionary<int, DateTime> _pendingSeen = new();
+
+    public void Touch(int pcId) => _pendingSeen[pcId] = DateTime.UtcNow;
+
+    /// <summary>Забрати всі накопичені позначки «ПК живий» для запису в базу.</summary>
+    public Dictionary<int, DateTime> TakePendingSeen()
+    {
+        var result = new Dictionary<int, DateTime>();
+        foreach (var pcId in _pendingSeen.Keys)
+            if (_pendingSeen.TryRemove(pcId, out var at)) result[pcId] = at;
+        return result;
+    }
 }
 
 /// <summary>Навантаження, яке створює агент на ПК.</summary>

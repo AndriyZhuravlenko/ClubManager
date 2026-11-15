@@ -113,7 +113,7 @@ public class OwnerCache
     /// Перевірка хешу у форматі ASP.NET Core Identity (версія 3):
     /// [0x01][PRF: 4 байти][ітерації: 4 байти][довжина солі: 4 байти][сіль][похідний ключ].
     /// </summary>
-    private static bool VerifyHash(string hashBase64, string password)
+    internal static bool VerifyHash(string hashBase64, string password)
     {
         try
         {

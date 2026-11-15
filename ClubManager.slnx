@@ -3,4 +3,10 @@
   <Project Path="src/Club.Agent/Club.Agent.csproj" />
   <Project Path="src/Club.Shell/Club.Shell.csproj" />
   <Project Path="src/Club.Shared/Club.Shared.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Club.Tests/Club.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Club.LoadTest/Club.LoadTest.csproj" />
+  </Folder>
 </Solution>

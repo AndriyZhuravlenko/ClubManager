@@ -14,7 +14,7 @@ public class MaintenanceService(IServiceScopeFactory scopes, IConfiguration conf
     {
         try
         {
-            await Task.Delay(TimeSpan.FromMinutes(1), ct);
+            await Task.Delay(TimeSpan.FromMinutes(10), ct);   // не одразу після старту, коли підключаються всі ПК
             using var timer = new PeriodicTimer(TimeSpan.FromHours(6));
             do
             {
@@ -43,7 +43,9 @@ public class MaintenanceService(IServiceScopeFactory scopes, IConfiguration conf
             }
         }
 
-        // Перенести зміни з журналу SQLite (WAL) в основний файл і обрізати його
-        await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE);", ct);
+        // Перенести зміни з журналу SQLite (WAL) в основний файл і обрізати його.
+        // PASSIVE не блокує інші записи (на відміну від TRUNCATE): якщо зараз хтось пише,
+        // частина сторінок просто перенесеться наступного разу.
+        await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(PASSIVE);", ct);
     }
 }
