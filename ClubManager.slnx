@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Club.Server/Club.Server.csproj" />
+  <Project Path="src/Club.Agent/Club.Agent.csproj" />
+  <Project Path="src/Club.Shell/Club.Shell.csproj" />
+  <Project Path="src/Club.Shared/Club.Shared.csproj" />
+</Solution>

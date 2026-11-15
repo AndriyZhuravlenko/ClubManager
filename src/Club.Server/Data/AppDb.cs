@@ -1,0 +1,78 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+
+namespace Club.Server.Data;
+
+/// <summary>Доступ до бази даних через Entity Framework Core.</summary>
+public class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
+{
+    public DbSet<Pc> Pcs => Set<Pc>();
+    public DbSet<AdminUser> Admins => Set<AdminUser>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<Session> Sessions => Set<Session>();
+    public DbSet<EventLog> Events => Set<EventLog>();
+    public DbSet<AppEntry> Apps => Set<AppEntry>();
+    public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<TopUp> TopUps => Set<TopUp>();
+
+    /// <summary>
+    /// Створює таблиці, що з'явилися в новій версії, не чіпаючи наявних даних
+    /// (замість міграцій — для навчального проєкту цього достатньо).
+    /// </summary>
+    public void AddMissingTables()
+    {
+        Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Apps" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_Apps" PRIMARY KEY AUTOINCREMENT,
+                "Name" TEXT NOT NULL,
+                "Path" TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS "Settings" (
+                "Key" TEXT NOT NULL CONSTRAINT "PK_Settings" PRIMARY KEY,
+                "Value" TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS "TopUps" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_TopUps" PRIMARY KEY AUTOINCREMENT,
+                "ClientId" INTEGER NOT NULL,
+                "Minutes" INTEGER NOT NULL,
+                "At" TEXT NOT NULL,
+                "Actor" TEXT NULL);
+            """);
+
+        // Нові стовпці в наявній таблиці
+        AddColumnIfMissing("Sessions", "ServiceAdmin", "TEXT NULL");
+        AddColumnIfMissing("Sessions", "LockedAt", "TEXT NULL");
+        AddColumnIfMissing("Sessions", "PausedSeconds", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // SQLite не має "ADD COLUMN IF NOT EXISTS", тому спершу перевіряємо, чи стовпець уже є
+    private void AddColumnIfMissing(string table, string column, string definition)
+    {
+        var exists = Database.SqlQueryRaw<int>(
+            $"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('{table}') WHERE name = '{column}'")
+            .AsEnumerable().First() > 0;
+        if (!exists)
+            Database.ExecuteSqlRaw($"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition}");
+    }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        // SQLite не зберігає "тип" дати, тому при читанні позначаємо всі дати як UTC.
+        builder.Properties<DateTime>().HaveConversion<UtcConverter>();
+    }
+
+    protected override void OnModelCreating(ModelBuilder b)
+    {
+        b.Entity<Pc>().HasIndex(p => p.MachineName).IsUnique();
+        b.Entity<AdminUser>().HasIndex(a => a.Login).IsUnique();
+        b.Entity<Client>().HasIndex(c => c.Login).IsUnique();
+        b.Entity<Session>().HasIndex(s => new { s.PcId, s.ClosedAt });
+        b.Entity<Setting>().HasKey(s => s.Key);
+    }
+
+    /// <summary>Додати запис у журнал (зберігається разом з наступним SaveChanges).</summary>
+    public void Log(int? pcId, string text, string? actor = null) =>
+        Events.Add(new EventLog { At = DateTime.UtcNow, PcId = pcId, Actor = actor, Text = text });
+}
+
+public class UtcConverter() : ValueConverter<DateTime, DateTime>(
+    v => v.Kind == DateTimeKind.Utc ? v : v.ToUniversalTime(),
+    v => DateTime.SpecifyKind(v, DateTimeKind.Utc));

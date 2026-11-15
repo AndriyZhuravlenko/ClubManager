@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Club Manager — панель адміністратора</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f5f5f4; color: #1c1917; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 17px; margin: 28px 0 10px; display: flex; gap: 12px; align-items: center; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border-bottom: 1px solid #e7e5e4; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #fafaf9; font-weight: 600; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .on  { background: #dcfce7; color: #166534; }
+  .off { background: #e7e5e4; color: #57534e; }
+  .busy { background: #dbeafe; color: #1e40af; }
+  .free { background: #fef9c3; color: #854d0e; }
+  .bad { background: #fee2e2; color: #991b1b; }
+  button { margin: 2px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
+  .muted { color: #78716c; font-size: 12px; }
+  #events td { font-size: 13px; }
+  .hidden { display: none !important; }
+  .dlg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+  .dlg .box { background: #fff; padding: 20px; border-radius: 8px; min-width: 320px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+  .dlg input { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 6px; font-size: 14px; }
+  .dlg .btns { text-align: right; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Club Manager — панель адміністратора</h1>
+  <div><span id="me" class="muted"></span>
+    <a id="reportsLink" href="/reports.html" class="hidden" style="margin:0 8px">Звіти</a>
+    <button onclick="changePassword()">Змінити пароль</button>
+    <button onclick="logout()">Вийти</button></div>
+</header>
+
+<table>
+  <thead>
+    <tr><th>ПК</th><th>Мережа</th><th>Сеанс</th><th>Залишилось</th><th>Керування сеансом</th><th>Команди</th></tr>
+  </thead>
+  <tbody id="pcs"><tr><td colspan="6">Завантаження…</td></tr></tbody>
+</table>
+
+<h2>Клієнти <button onclick="newClient()">+ Новий клієнт</button></h2>
+<table>
+  <thead><tr><th>Логін</th><th>Баланс</th><th>Стан</th><th>Дії</th></tr></thead>
+  <tbody id="clients"></tbody>
+</table>
+
+<h2>Дозволені програми <button onclick="newApp()">+ Програма</button></h2>
+<p class="muted" style="margin:0 0 8px">
+  Режим контролю: <b id="appMode">…</b>
+  <button id="appModeBtn" class="hidden" onclick="toggleMode()"></button>
+  <br>Програми з папки C:\Windows і з папок програм каталогу дозволені завжди.
+</p>
+<table>
+  <thead><tr><th>Назва</th><th>Шлях на клієнтських ПК</th><th>Дії</th></tr></thead>
+  <tbody id="apps"></tbody>
+</table>
+
+<section id="adminsSection" class="hidden">
+  <h2>Адміністратори <button onclick="newAdmin()">+ Новий адміністратор</button></h2>
+  <table>
+    <thead><tr><th>Логін</th><th>Роль</th><th>Дії</th></tr></thead>
+    <tbody id="admins"></tbody>
+  </table>
+</section>
+
+<h2>Журнал подій</h2>
+<table id="events"><tbody></tbody></table>
+
+<!-- Власне діалогове вікно замість alert/confirm/prompt браузера -->
+<div id="dlg" class="dlg hidden">
+  <div class="box">
+    <div id="dlgText"></div>
+    <input id="dlgInput">
+    <div class="btns"><button id="dlgOk">OK</button> <button id="dlgCancel">Скасувати</button></div>
+  </div>
+</div>
+
+<script>
+// ---------- Допоміжні функції ----------
+
+// mode: 'confirm' — Так/Скасувати, 'prompt' — поле введення, 'password' — приховане поле,
+// 'alert' — лише OK. Повертає Promise: true / введений текст / null (скасовано).
+function dialog(text, mode = 'confirm', def = '') {
+  return new Promise(resolve => {
+    const dlg = document.getElementById('dlg');
+    const input = document.getElementById('dlgInput');
+    const ok = document.getElementById('dlgOk');
+    const cancel = document.getElementById('dlgCancel');
+    const withInput = mode === 'prompt' || mode === 'password';
+    document.getElementById('dlgText').textContent = text;
+    input.style.display = withInput ? '' : 'none';
+    input.type = mode === 'password' ? 'password' : 'text';
+    cancel.style.display = mode === 'alert' ? 'none' : '';
+    input.value = def;
+    dlg.classList.remove('hidden');
+    (withInput ? input : ok).focus();
+
+    const finish = value => {
+      dlg.classList.add('hidden');
+      ok.onclick = cancel.onclick = input.onkeydown = null;
+      resolve(value);
+    };
+    ok.onclick = () => finish(withInput ? input.value : true);
+    cancel.onclick = () => finish(null);
+    input.onkeydown = e => {
+      if (e.key === 'Enter') ok.onclick();
+      if (e.key === 'Escape') cancel.onclick();
+    };
+  });
+}
+
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (r.status === 401) { location.href = '/login.html'; return null; }
+  if (!r.ok) {
+    let msg = r.status === 403 ? 'Недостатньо прав' : 'HTTP ' + r.status;
+    try { const j = await r.json(); if (j.error) msg = j.error; } catch {}
+    await dialog('Помилка: ' + msg, 'alert');
+    return null;
+  }
+  const text = await r.text();
+  return text ? JSON.parse(text) : {};
+}
+
+async function getJson(url) {
+  const r = await fetch(url);
+  if (r.status === 401) { location.href = '/login.html'; throw new Error('401'); }
+  return r.json();
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function fmt(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  const two = n => String(n).padStart(2, '0');
+  return (h > 0 ? h + ':' : '') + two(m) + ':' + two(s);
+}
+
+function time(iso) {
+  return new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+}
+
+function minutesText(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h > 0 ? `${h} год ${m} хв` : `${m} хв`;
+}
+
+async function askNumber(text, def, max) {
+  const v = await dialog(text, 'prompt', def);
+  if (v === null) return null;
+  const n = parseInt(v, 10);
+  if (!(n >= 1 && n <= max)) { await dialog(`Введіть число від 1 до ${max}`, 'alert'); return null; }
+  return n;
+}
+
+// ---------- Обліковий запис адміністратора ----------
+
+let me = null;
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login.html';
+}
+
+async function changePassword() {
+  const oldPassword = await dialog('Поточний пароль:', 'password');
+  if (oldPassword === null) return;
+  const newPassword = await dialog('Новий пароль (щонайменше 4 символи):', 'password');
+  if (newPassword === null) return;
+  const again = await dialog('Повторіть новий пароль:', 'password');
+  if (again === null) return;
+  if (again !== newPassword) { await dialog('Паролі не збігаються', 'alert'); return; }
+  if (await api('POST', '/api/auth/password', { oldPassword, newPassword }))
+    await dialog('Пароль змінено', 'alert');
+}
+
+// ---------- Комп'ютери ----------
+
+async function startSession(id) {
+  const m = await askNumber('Гостьовий сеанс: на скільки хвилин?', '60', 1440);
+  if (m && await api('POST', `/api/pcs/${id}/session`, { minutes: m })) refresh();
+}
+async function extendSession(id) {
+  const m = await askNumber('Скільки хвилин додати?', '30', 1440);
+  if (m && await api('POST', `/api/pcs/${id}/session/extend`, { minutes: m })) refresh();
+}
+async function endSession(id) {
+  if (await dialog('Завершити сеанс?') && await api('POST', `/api/pcs/${id}/session/end`)) refresh();
+}
+// Назва не "command": так називається вбудована властивість кнопок у браузері
+async function sendCommand(id, type) {
+  let text = null;
+  if (type === 'ShowMessage') {
+    text = await dialog('Текст повідомлення:', 'prompt');
+    if (!text) return;
+  }
+  if ((type === 'Reboot' || type === 'Shutdown') &&
+      !await dialog(type === 'Reboot' ? 'Перезавантажити цей ПК?' : 'Вимкнути цей ПК?')) return;
+  if (await api('POST', `/api/pcs/${id}/command`, { type, text })) refresh();
+}
+let pcNames = {};
+async function rename(id) {
+  const name = await dialog('Нова назва ПК:', 'prompt', pcNames[id] || '');
+  if (name && await api('PUT', `/api/pcs/${id}/name`, { name })) refresh();
+}
+
+// ---------- Клієнти ----------
+
+let clientNames = {};
+async function newClient() {
+  const login = await dialog('Логін нового клієнта (щонайменше 3 символи):', 'prompt');
+  if (!login) return;
+  const password = await dialog('Пароль клієнта (щонайменше 4 символи):', 'password');
+  if (password === null) return;
+  const v = await dialog('Початковий баланс, хвилин:', 'prompt', '60');
+  if (v === null) return;
+  const minutes = parseInt(v, 10) || 0;
+  if (await api('POST', '/api/clients', { login, password, minutes })) refresh();
+}
+async function topUp(id) {
+  const m = await askNumber(`Поповнити баланс «${clientNames[id]}» на скільки хвилин?`, '60', 10000);
+  if (m && await api('POST', `/api/clients/${id}/topup`, { minutes: m })) refresh();
+}
+async function setClientPassword(id) {
+  const password = await dialog(`Новий пароль для «${clientNames[id]}»:`, 'password');
+  if (password && await api('POST', `/api/clients/${id}/password`, { password }))
+    await dialog('Пароль змінено', 'alert');
+}
+async function deleteClient(id) {
+  const q = `Видалити клієнта «${clientNames[id]}» назавжди? Невикористаний баланс буде втрачено. ` +
+            `Якщо клієнт зараз грає, сеанс завершиться. Історія сеансів залишиться у звітах.`;
+  if (await dialog(q) && await api('DELETE', `/api/clients/${id}`)) refresh();
+}
+async function blockClient(id, blocked) {
+  const q = blocked ? `Заблокувати «${clientNames[id]}»? Якщо клієнт зараз грає, сеанс завершиться.`
+                    : `Розблокувати «${clientNames[id]}»?`;
+  if (await dialog(q) && await api('POST', `/api/clients/${id}/block`, { blocked })) refresh();
+}
+
+// ---------- Дозволені програми ----------
+
+let appNames = {};
+let enforce = false;
+async function newApp() {
+  const name = await dialog('Назва програми у вітрині (напр. «Counter-Strike 2»):', 'prompt');
+  if (!name) return;
+  const path = await dialog('Повний шлях до .exe на клієнтських ПК (напр. C:\\Games\\CS2\\cs2.exe):', 'prompt');
+  if (!path) return;
+  if (await api('POST', '/api/apps', { name, path })) refresh();
+}
+async function deleteApp(id) {
+  if (await dialog(`Прибрати «${appNames[id]}» з каталогу?`) && await api('DELETE', `/api/apps/${id}`)) refresh();
+}
+async function toggleMode() {
+  const q = enforce
+    ? 'Перейти в режим СПОСТЕРЕЖЕННЯ? Недозволені програми лише записуватимуться в журнал.'
+    : 'Увімкнути режим ЗАКРИВАННЯ? Під час сеансів усі програми поза каталогом будуть закриватися.';
+  if (await dialog(q) && await api('POST', '/api/apps/mode', { enforce: !enforce })) refresh();
+}
+
+// ---------- Адміністратори ----------
+
+let adminNames = {};
+async function newAdmin() {
+  const login = await dialog('Логін нового адміністратора:', 'prompt');
+  if (!login) return;
+  const password = await dialog('Пароль (щонайменше 4 символи):', 'password');
+  if (password === null) return;
+  const owner = await dialog('Надати роль ВЛАСНИКА (повний доступ)?\nOK — власник, Скасувати — адміністратор зміни.');
+  const role = owner ? 'Owner' : 'Operator';
+  if (await api('POST', '/api/admins', { login, password, role })) refresh();
+}
+async function deleteAdmin(id) {
+  if (await dialog(`Видалити адміністратора «${adminNames[id]}»?`) && await api('DELETE', `/api/admins/${id}`)) refresh();
+}
+
+// ---------- Оновлення сторінки ----------
+
+async function refresh() {
+  try {
+    const pcs = await getJson('/api/pcs');
+    pcNames = Object.fromEntries(pcs.map(p => [p.id, p.displayName]));
+    renderRows('pcs', 6, pcs.map(p => {
+      const s = p.session;
+      const net = p.online ? '<span class="badge on">онлайн</span>' : '<span class="badge off">офлайн</span>';
+      const service = s && s.serviceAdmin;
+      const who = s ? (service ? `адмін ${esc(s.serviceAdmin)}` : s.client ? `клієнт ${esc(s.client)}` : 'гість') : '';
+      const ses = !s ? '<span class="badge free">вільний</span>'
+        : s.paused ? `<span class="badge bad">${who}, призупинено</span>`
+        : service ? `<span class="badge on">${who}, службовий</span>`
+        : `<span class="badge busy">${who}, до ${time(s.endsAt)}</span>`;
+      const left = s ? (service ? 'без обмежень' : fmt(s.remainingSeconds)) : '—';
+      const sesBtns = s
+        ? (s.client || service ? '' : `<button onclick="extendSession(${p.id})">+ час</button>`) +
+          `<button onclick="endSession(${p.id})">Завершити</button>`
+        : `<button onclick="startSession(${p.id})">Гостьовий сеанс</button>`;
+      const dis = p.online ? '' : 'disabled';
+      const cmdBtns = `
+        <button ${dis} onclick="sendCommand(${p.id}, 'ShowMessage')">Повідомлення</button>
+        <button ${dis} onclick="sendCommand(${p.id}, 'Lock')">Блок</button>
+        <button ${dis} onclick="sendCommand(${p.id}, 'Unlock')">Розблок</button>
+        <button ${dis} onclick="sendCommand(${p.id}, 'Reboot')">Перезавантажити</button>
+        <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button>`;
+      const agent = p.online && p.agent ? ` · агент: ${p.agent.cpuPercent}% CPU, ${p.agent.memoryMb} МБ` : '';
+      const name = `<b>${esc(p.displayName)}</b> <a href="#" onclick="rename(${p.id}); return false;">✎</a>
+            <div class="muted">${esc(p.machineName)}${agent}</div>`;
+      return { id: p.id, cells: [name, net, ses, left, sesBtns, cmdBtns] };
+    }), 'Поки що жоден ПК не підключався. Запустіть агента на віртуальній машині.');
+
+    const clients = await getJson('/api/clients');
+    clientNames = Object.fromEntries(clients.map(c => [c.id, c.login]));
+    renderRows('clients', 4, clients.map(c => {
+      const state = c.isBlocked ? '<span class="badge bad">заблоковано</span>'
+        : c.playing ? '<span class="badge busy">грає</span>' : '<span class="badge off">не в клубі</span>';
+      const btns = `<button onclick="topUp(${c.id})">Поповнити</button>
+        <button onclick="setClientPassword(${c.id})">Пароль</button>
+        <button onclick="blockClient(${c.id}, ${!c.isBlocked})">${c.isBlocked ? 'Розблокувати' : 'Заблокувати'}</button>` +
+        (me && me.role === 'Owner' ? `<button onclick="deleteClient(${c.id})">Видалити</button>` : '');
+      return { id: c.id, cells: [`<b>${esc(c.login)}</b>`, minutesText(c.balanceMinutes), state, btns] };
+    }), 'Клієнтів ще немає');
+
+    const policy = await getJson('/api/apps');
+    enforce = policy.enforce;
+    appNames = Object.fromEntries(policy.apps.map(a => [a.id, a.name]));
+    document.getElementById('appMode').textContent = enforce
+      ? 'закривати недозволені програми' : 'лише спостереження (порушення записуються в журнал)';
+    const modeBtn = document.getElementById('appModeBtn');
+    modeBtn.textContent = enforce ? 'Перейти в режим спостереження' : 'Увімкнути закривання';
+    modeBtn.classList.toggle('hidden', !(me && me.role === 'Owner'));
+    renderRows('apps', 3, policy.apps.map(a => ({
+      id: a.id,
+      cells: [`<b>${esc(a.name)}</b>`, `<span class="muted">${esc(a.path)}</span>`, `<button onclick="deleteApp(${a.id})">Прибрати</button>`]
+    })), 'Каталог порожній — додайте програми, які клієнти можуть запускати');
+
+    if (me && me.role === 'Owner') {
+      const admins = await getJson('/api/admins');
+      adminNames = Object.fromEntries(admins.map(a => [a.id, a.login]));
+      renderRows('admins', 3, admins.map(a => ({
+        id: a.id,
+        cells: [`<b>${esc(a.login)}</b>`, a.role === 'Owner' ? 'власник' : 'адміністратор зміни',
+                a.login === me.login ? '<span class="muted">це ви</span>' : `<button onclick="deleteAdmin(${a.id})">Видалити</button>`]
+      })), '');
+    }
+
+    const events = await getJson('/api/events');
+    document.querySelector('#events tbody').innerHTML = events.map(e =>
+      `<tr><td class="muted">${new Date(e.at).toLocaleString('uk-UA')}</td><td>${esc(e.pc)}</td><td>${esc(e.actor)}</td><td>${esc(e.text)}</td></tr>`
+    ).join('');
+  } catch (err) {
+    if (String(err.message) === '401') return;
+    const tbody = document.getElementById('pcs');
+    tbody.dataset.ids = '';
+    tbody.innerHTML = '<tr><td colspan="6">Немає зв’язку із сервером</td></tr>';
+  }
+}
+
+// Оновлюємо лише ті клітинки, вміст яких змінився. Якщо перемальовувати
+// всю таблицю, кнопки замінюються новими і клік у цей момент губиться.
+function renderRows(tbodyId, cols, rows, emptyText) {
+  const tbody = document.getElementById(tbodyId);
+  if (!rows.length) {
+    tbody.dataset.ids = '';
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="muted">${emptyText}</td></tr>`;
+    return;
+  }
+  const ids = rows.map(r => r.id).join(',');
+  if (tbody.dataset.ids !== ids) {
+    tbody.innerHTML = rows.map(() => `<tr>${'<td></td>'.repeat(cols)}</tr>`).join('');
+    tbody.dataset.ids = ids;
+  }
+  rows.forEach((r, i) => {
+    const tds = tbody.rows[i].cells;
+    r.cells.forEach((html, j) => {
+      if (tds[j]._html !== html) { tds[j].innerHTML = html; tds[j]._html = html; }
+    });
+  });
+}
+
+// ---------- Старт ----------
+
+(async () => {
+  try {
+    me = await getJson('/api/auth/me');
+  } catch { return; }
+  document.getElementById('me').textContent =
+    `${me.login} (${me.role === 'Owner' ? 'власник' : 'адміністратор зміни'})`;
+  if (me.role === 'Owner') {
+    document.getElementById('adminsSection').classList.remove('hidden');
+    document.getElementById('reportsLink').classList.remove('hidden');
+  }
+  refresh();
+  setInterval(refresh, 2000);
+})();
+</script>
+</body>
+</html>

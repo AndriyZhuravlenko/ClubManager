@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Club Manager — звіти</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f5f5f4; color: #1c1917; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 17px; margin: 28px 0 10px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border-bottom: 1px solid #e7e5e4; padding: 7px 10px; text-align: left; font-size: 14px; }
+  th { background: #fafaf9; font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .muted { color: #78716c; font-size: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .card { background: #fff; border-radius: 8px; padding: 12px 14px; }
+  .card .v { font-size: 24px; font-weight: 600; }
+  .card .l { font-size: 12px; color: #78716c; }
+  .bar { background: #3b82f6; height: 14px; border-radius: 3px; min-width: 1px; }
+  .barcell { width: 45%; }
+  .hours { display: flex; align-items: flex-end; gap: 3px; height: 160px; background: #fff; padding: 12px 12px 0; border-radius: 8px; }
+  .hours div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .hours .col { width: 100%; background: #3b82f6; border-radius: 3px 3px 0 0; }
+  .hours .lbl { font-size: 11px; color: #78716c; padding: 4px 0; }
+  .controls { display: flex; gap: 10px; align-items: center; }
+  @media print { .controls, header a { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Звіти</h1>
+  <a href="/">← Панель</a>
+</header>
+
+<div class="controls">
+  з <input type="date" id="from"> по <input type="date" id="to">
+  <button onclick="load()">Показати</button>
+  <button onclick="window.print()">Друк / PDF</button>
+  <span id="status" class="muted"></span>
+</div>
+
+<div id="report"></div>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// За замовчуванням — останні 7 днів
+const today = new Date();
+document.getElementById('to').value = ymd(today);
+document.getElementById('from').value = ymd(new Date(today.getTime() - 6 * 86400000));
+
+function table(headers, rows, numeric = []) {
+  if (!rows.length) return '<p class="muted">Немає даних за цей період</p>';
+  const th = headers.map((h, i) => `<th class="${numeric.includes(i) ? 'num' : ''}">${h}</th>`).join('');
+  const tr = rows.map(r => '<tr>' + r.map((c, i) =>
+    `<td class="${numeric.includes(i) ? 'num' : ''}">${c}</td>`).join('') + '</tr>').join('');
+  return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+
+function card(value, label) {
+  return `<div class="card"><div class="v">${value}</div><div class="l">${label}</div></div>`;
+}
+
+async function load() {
+  const status = document.getElementById('status');
+  // Межі періоду — початок першого і кінець останнього дня за місцевим часом
+  const from = new Date(document.getElementById('from').value + 'T00:00:00');
+  const to = new Date(document.getElementById('to').value + 'T00:00:00');
+  to.setDate(to.getDate() + 1);
+  status.textContent = 'Завантаження…';
+
+  const url = `/api/reports?from=${from.toISOString()}&to=${to.toISOString()}&tzOffset=${new Date().getTimezoneOffset()}`;
+  const r = await fetch(url);
+  if (r.status === 401) { location.href = '/login.html'; return; }
+  if (r.status === 403) { status.textContent = 'Звіти доступні лише власнику'; return; }
+  if (!r.ok) { status.textContent = 'Помилка: ' + ((await r.json().catch(() => ({}))).error || r.status); return; }
+  const d = await r.json();
+  status.textContent = `Сформовано ${new Date().toLocaleString('uk-UA')}`;
+
+  const s = d.summary;
+  const kinds = s.byKind.map(k => `${k.kind}: ${k.count} (${k.hours} год)`).join(' · ') || '—';
+  const maxUtil = Math.max(1, ...d.pcStats.map(p => p.utilization));
+  const maxHour = Math.max(0.01, ...d.hourly.map(h => h.avgBusyPcs));
+  const m = d.measurements;
+
+  document.getElementById('report').innerHTML = `
+    <h2>Підсумок</h2>
+    <div class="cards">
+      ${card(s.sessions, 'сеансів')}
+      ${card(s.hours, 'годин роботи ПК')}
+      ${card(s.avgSessionMinutes, 'хв — середній сеанс')}
+      ${card(s.chargedMinutes, 'хв списано з балансів')}
+      ${card(s.topUpMinutes, 'хв поповнено')}
+    </div>
+    <p class="muted">За видами: ${esc(kinds)}</p>
+
+    <h2>Завантаженість комп'ютерів</h2>
+    ${table(['ПК', 'Сеансів', 'Годин', 'Завантаженість', '', 'Агент зараз'],
+      d.pcStats.map(p => [esc(p.displayName), p.sessions, p.hours, p.utilization + '%',
+        `<div class="bar" style="width:${p.utilization / maxUtil * 100}%"></div>`,
+        p.agent ? `${p.agent.cpuPercent}% CPU, ${p.agent.memoryMb} МБ` : '<span class="muted">офлайн</span>']),
+      [1, 2, 3])}
+
+    <h2>Середня кількість зайнятих ПК за годинами доби</h2>
+    <div class="hours">
+      ${d.hourly.map(h => `<div title="${h.hour}:00 — ${h.avgBusyPcs} ПК">
+        <div class="col" style="height:${h.avgBusyPcs / maxHour * 100}%"></div>
+        <span class="lbl">${h.hour}</span></div>`).join('')}
+    </div>
+
+    <h2>Клієнти</h2>
+    ${table(['Клієнт', 'Сеансів', 'Списано, хв'], d.clientStats.map(c => [esc(c.login), c.sessions, c.chargedMinutes]), [1, 2])}
+
+    <h2>Адміністратори</h2>
+    ${table(['Логін', 'Дій у журналі', 'Поповнено, хв', 'Службові сеанси, год'],
+      d.adminStats.map(a => [esc(a.login), a.actions, a.topUpMinutes, a.serviceHours]), [1, 2, 3])}
+
+    <h2>Контроль програм</h2>
+    <p>Закрито недозволених програм: <b>${d.violations.closed}</b> · помічено в режимі спостереження: <b>${d.violations.seen}</b></p>
+    ${table(['Програма', 'Випадків'], d.violations.topPrograms.map(v => [`<span class="muted">${esc(v.program)}</span>`, v.count]), [1])}
+
+    <h2>Вимірювання</h2>
+    ${table(['Показник', 'Кількість', 'Середнє', 'Мін.', 'Макс.', '95-й перцентиль'], [
+      ['Час виконання команди (від сервера до підтвердження агента), мс',
+        m.commands.count, m.commands.avg, m.commands.min, m.commands.max, m.commands.p95],
+      ['Час відновлення зв\'язку агента з сервером, с',
+        m.reconnects.count, m.reconnects.avg, m.reconnects.min, m.reconnects.max, m.reconnects.p95]
+    ], [1, 2, 3, 4, 5])}
+  `;
+}
+
+load();
+</script>
+</body>
+</html>
