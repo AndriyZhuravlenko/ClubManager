@@ -26,7 +26,8 @@ public class ShellPipeServer(IOptions<AgentOptions> options, ILogger<ShellPipeSe
     {
         lock (_lock)
         {
-            _state = _state with { Locked = locked, SessionEndsAt = sessionEndsAt, Kind = kind };
+            // Після блокування (кінець сеансу) переписку прибираємо — наступний користувач її не побачить
+            _state = _state with { Locked = locked, SessionEndsAt = sessionEndsAt, Kind = kind, Chat = locked ? null : _state.Chat };
             Broadcast(_state with { Text = text });
         }
     }
@@ -37,6 +38,18 @@ public class ShellPipeServer(IOptions<AgentOptions> options, ILogger<ShellPipeSe
         lock (_lock)
         {
             _state = _state with { Apps = apps };
+            Broadcast(_state);
+        }
+    }
+
+    /// <summary>Додати рядок чату з адміністратором (останні 100) і передати оболонці.</summary>
+    public void AddChat(ChatLine line)
+    {
+        lock (_lock)
+        {
+            if (_state.Locked) return;
+            var chat = (_state.Chat ?? new List<ChatLine>()).Append(line).TakeLast(100).ToList();
+            _state = _state with { Chat = chat };
             Broadcast(_state);
         }
     }

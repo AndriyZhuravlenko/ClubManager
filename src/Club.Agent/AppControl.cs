@@ -59,6 +59,11 @@ public class AppControl : BackgroundService
         _machineCleanup = options.Value.MachineCleanup;
         agent.SessionEnded += () => _ = Task.Run(CloseUserAppsAsync);
 
+        // Віддалене керування програмами з панелі адміністратора
+        agent.ListAppsHandler = ListUserApps;
+        agent.CloseAppHandler = CloseUserApp;
+        agent.LaunchAppHandler = LaunchCatalogApp;
+
         agent.PolicyReceived += p => { lock (_lock) _policy = p; };
         agent.SessionActiveChanged += active =>
         {
@@ -196,6 +201,108 @@ public class AppControl : BackgroundService
         var deleted = 0;
         foreach (var path in _machineCleanup) deleted += DeleteMachinePath(Environment.ExpandEnvironmentVariables(path));
         if (deleted > 0) await _agent.ReportAsync($"Після завершення сеансу видалено файлів із даними входу: {deleted}");
+    }
+
+    // ---------- Віддалене керування програмами (з панелі адміністратора) ----------
+
+    /// <summary>
+    /// Програми, запущені в сеансі користувача. Системні процеси Windows, критичні процеси й сам агент
+    /// не показуються. Усі процеси одного .exe (напр., 12 процесів браузера) об'єднуються в один рядок.
+    /// </summary>
+    public List<RunningApp> ListUserApps()
+    {
+        var session = (int)ShellWatchdog.ActiveSessionId();
+        AppPolicy policy;
+        lock (_lock) policy = _policy;
+        var catalog = policy.Apps.ToDictionary(a => a.Path, a => a.Name, StringComparer.OrdinalIgnoreCase);
+
+        var found = new Dictionary<string, (int Count, long Memory)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                if (process.SessionId != session) continue;
+                if (UserAppPath(process.Id) is not { } path) continue;
+                long memory = 0;
+                try { memory = process.WorkingSet64; } catch { }
+                found[path] = found.TryGetValue(path, out var f) ? (f.Count + 1, f.Memory + memory) : (1, memory);
+            }
+        }
+
+        return found
+            .Select(x => new RunningApp(
+                x.Key,
+                Path.GetFileName(x.Key),
+                catalog.TryGetValue(x.Key, out var name) ? name : Describe(x.Key),
+                x.Value.Count,
+                Math.Round(x.Value.Memory / 1024.0 / 1024, 1),
+                catalog.ContainsKey(x.Key)))
+            .OrderBy(a => a.Title, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Закрити всі процеси програми в сеансі користувача.</summary>
+    public AppActionResult CloseUserApp(string path)
+    {
+        var session = (int)ShellWatchdog.ActiveSessionId();
+        var closed = 0;
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                if (process.SessionId != session) continue;
+                if (UserAppPath(process.Id) is not { } p || !p.Equals(path, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    closed++;
+                }
+                catch { /* процес уже завершився */ }
+            }
+        }
+        return closed > 0
+            ? new AppActionResult(true, $"Закрито процесів: {closed}")
+            : new AppActionResult(false, "Програму не знайдено серед запущених (можливо, її вже закрито)");
+    }
+
+    /// <summary>Запустити програму з каталогу дозволених у сеансі користувача.</summary>
+    public AppActionResult LaunchCatalogApp(string path)
+    {
+        AppPolicy policy;
+        lock (_lock) policy = _policy;
+        // Агент запускає лише програми з каталогу, навіть якщо сервер попросить інше
+        if (!policy.Apps.Any(a => a.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
+            return new AppActionResult(false, "Програми немає в каталозі дозволених");
+        if (_agent.IsLocked)
+            return new AppActionResult(false, "ПК заблоковано — спершу відкрийте сеанс");
+        if (!File.Exists(path))
+            return new AppActionResult(false, $"Файл не знайдено на цьому ПК: {path}");
+
+        var error = ShellWatchdog.LaunchInUserSession(path);
+        return error == null
+            ? new AppActionResult(true, "Програму запущено")
+            : new AppActionResult(false, $"Не вдалося запустити: {error}");
+    }
+
+    /// <summary>Шлях до .exe, якщо це програма користувача (не системна, не критична, не агент).</summary>
+    private string? UserAppPath(int processId)
+    {
+        var path = GetPath(processId);
+        if (path == null) return null;
+        if (Critical.Contains(Path.GetFileName(path))) return null;
+        if (_alwaysAllowed.Any(f => path.StartsWith(f, StringComparison.OrdinalIgnoreCase))) return null;
+        return path;
+    }
+
+    private static string Describe(string path)
+    {
+        try
+        {
+            var description = FileVersionInfo.GetVersionInfo(path).FileDescription;
+            if (!string.IsNullOrWhiteSpace(description)) return description.Trim();
+        }
+        catch { }
+        return Path.GetFileNameWithoutExtension(path);
     }
 
     /// <summary>Видаляє файл, папку або файли за шаблоном в останній частині шляху. Повертає кількість.</summary>

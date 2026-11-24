@@ -20,3 +20,6 @@ publish/
 # Журнали
 logs/
 *.log
+
+# Ключ Gemini API для AI-асистента — особистий, ніколи не публікувати
+assistant-key.txt

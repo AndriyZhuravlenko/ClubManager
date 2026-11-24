@@ -92,6 +92,31 @@ public class AgentHub(AppDb db, ConnectionRegistry registry, SessionService sess
 
     /// <summary>Клієнт сам завершує свій сеанс.</summary>
     /// <param name="reason">null — користувач натиснув «Завершити»; "idle" — тривала неактивність.</param>
+    /// <summary>Користувач пише адміністратору з оболонки (чат). Повідомлення прив'язується до поточного сеансу.</summary>
+    public async Task<LoginResult> ChatFromUser(string? text)
+    {
+        if (!Context.Items.TryGetValue("pcId", out var value) || value is not int pcId)
+            return new LoginResult(false, "ПК не зареєстровано");
+        text = text?.Trim();
+        if (string.IsNullOrEmpty(text) || text.Length > ChatLine.MaxLength)
+            return new LoginResult(false, $"Повідомлення має містити від 1 до {ChatLine.MaxLength} символів");
+
+        var session = await db.Sessions.FirstOrDefaultAsync(s => s.PcId == pcId && s.ClosedAt == null);
+        if (session == null) return new LoginResult(false, "Чат доступний лише під час сеансу");
+
+        // Захист від засмічення: не більше 10 повідомлень за хвилину
+        var minuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        if (await db.Chats.CountAsync(c => c.SessionId == session.Id && !c.FromAdmin && c.At > minuteAgo) >= 10)
+            return new LoginResult(false, "Забагато повідомлень. Зачекайте хвилину");
+
+        var author = session.ServiceAdmin
+            ?? (session.ClientId is { } clientId ? (await db.Clients.FindAsync(clientId))?.Login : null)
+            ?? "гість";
+        db.Chats.Add(new ChatMessage { PcId = pcId, SessionId = session.Id, FromAdmin = false, Author = author, Text = text, At = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        return new LoginResult(true);
+    }
+
     public async Task<LoginResult> ClientLogout(string? reason)
     {
         if (!Context.Items.TryGetValue("pcId", out var value) || value is not int pcId)

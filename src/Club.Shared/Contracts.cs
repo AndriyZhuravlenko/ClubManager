@@ -13,12 +13,26 @@ public static class HubMethods
     public const string ClientLogin = "ClientLogin";       // клієнт входить на екрані блокування
     public const string ClientLogout = "ClientLogout";     // клієнт сам завершує сеанс
     public const string Report = "Report";                 // агент повідомляє про подію (порушення тощо)
+    public const string ChatFromUser = "ChatFromUser";     // користувач пише адміністратору
 
     // Сервер -> агент
     public const string Command = "Command";
     public const string AppPolicy = "AppPolicy";           // каталог дозволених програм і режим контролю
     public const string OwnerCredentials = "OwnerCredentials"; // хеші паролів власників для офлайн-входу
+
+    public const string ChatFromAdmin = "ChatFromAdmin";   // адміністратор відповідає користувачу
+
+    // Сервер -> агент із відповіддю (керування програмами в сеансі користувача)
+    public const string ListApps = "ListApps";             // які програми зараз запущені
+    public const string CloseApp = "CloseApp";             // закрити програму (усі її процеси)
+    public const string LaunchApp = "LaunchApp";           // запустити програму з каталогу в сеансі користувача
 }
+
+/// <summary>Запущена в сеансі користувача програма (усі процеси одного .exe разом).</summary>
+public record RunningApp(string Path, string FileName, string Title, int Processes, double MemoryMb, bool InCatalog);
+
+/// <summary>Результат дії агента з програмою.</summary>
+public record AppActionResult(bool Ok, string Message);
 
 /// <summary>Що агент повідомляє про себе при підключенні.</summary>
 public record AgentHello(string MachineName, string AgentVersion);
@@ -41,7 +55,7 @@ public enum CommandType
 /// Cleanup — що видаляти з профілю користувача після сеансу (дані входу, особисті файли).
 /// </summary>
 public record ShellMessage(bool Locked, DateTime? SessionEndsAt, string? Text = null, List<AppInfo>? Apps = null,
-    SessionKind Kind = SessionKind.None, List<string>? Cleanup = null)
+    SessionKind Kind = SessionKind.None, List<string>? Cleanup = null, List<ChatLine>? Chat = null)
 {
     public const string PipeName = "ClubAgentShell";       // агент -> оболонка (стан), лише читання
     public const string LoginPipeName = "ClubAgentLogin";  // оболонка -> агент (вхід/вихід клієнта)
@@ -64,8 +78,14 @@ public record AppPolicy(bool Enforce, List<AppInfo> Apps, List<string>? Blocked 
 /// </summary>
 public record OwnerCredential(string Login, string PasswordHash);
 
-/// <summary>Запит оболонки до агента. Action: "login" або "logout".</summary>
-public record ShellRequest(string Action, string? Login = null, string? Password = null);
+/// <summary>Запит оболонки до агента. Action: "login", "logout", "logout-idle" або "chat" (Text — повідомлення адміністратору).</summary>
+public record ShellRequest(string Action, string? Login = null, string? Password = null, string? Text = null);
+
+/// <summary>Рядок чату користувача з адміністратором. At — UTC.</summary>
+public record ChatLine(bool FromAdmin, string Author, string Text, DateTime At)
+{
+    public const int MaxLength = 500;
+}
 
 /// <summary>Результат входу/виходу клієнта.</summary>
 public record LoginResult(bool Ok, string? Error = null);

@@ -36,6 +36,7 @@ public class MaintenanceService(IServiceScopeFactory scopes, IConfiguration conf
         {
             var before = DateTime.UtcNow.AddDays(-days);
             var deleted = await db.Events.Where(e => e.At < before).ExecuteDeleteAsync(ct);
+            await db.Chats.Where(c => c.At < before).ExecuteDeleteAsync(ct);   // старі переписки — за тим самим строком
             if (deleted > 0)
             {
                 db.Log(null, $"Обслуговування: видалено записів журналу, старших за {days} днів: {deleted}");

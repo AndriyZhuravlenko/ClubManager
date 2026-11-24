@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using Club.Server.Api;
+using Club.Server.Assistant;
 using Club.Server.Data;
 using Club.Server.Hubs;
 using Club.Server.Security;
@@ -45,6 +46,21 @@ builder.Services.AddScoped<OwnerCredentialsService>();
 builder.Services.AddHostedService<SessionWatcher>();
 builder.Services.AddHostedService<MaintenanceService>();
 builder.Services.AddHostedService<HeartbeatFlusher>();
+builder.Services.AddSingleton<RemoteAppsService>();
+
+// AI-асистент панелі (Gemini). Ключ — у файлі assistant-key.txt поруч із сервером (не публікується в git)
+var assistantSettings = AssistantSettings.Load(builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddSingleton(assistantSettings);
+builder.Services.AddSingleton<ConversationStore>();
+builder.Services.AddHttpClient<GeminiClient>(c => c.Timeout = TimeSpan.FromSeconds(60))
+    .ConfigurePrimaryHttpMessageHandler(sp => GeminiClient.CreateHandler(sp.GetRequiredService<ILogger<GeminiClient>>()));
+builder.Services.AddHttpClient<OpenAiCompatibleClient>(c => c.Timeout = TimeSpan.FromMinutes(3));   // перший запуск локальної моделі довгий
+builder.Services.AddScoped<IModelClient, ModelRouter>();
+builder.Services.AddScoped<AssistantService>();
+startupLogs.CreateLogger("Club.Server.Assistant").LogInformation(assistantSettings.CloudConfigured
+    ? "AI-асистент: хмарна модель {Model} ({Api}), локальна — {Local}"
+    : "AI-асистент: немає ключа хмарної моделі в assistant-key.txt; доступна локальна модель {Local}",
+    assistantSettings.Model, assistantSettings.CloudApi, assistantSettings.LocalModel);
 
 // Автентифікація адміністраторів: захищений cookie після входу за логіном і паролем
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -111,6 +127,13 @@ using (var scope = app.Services.CreateScope())
         .CloseAllAsync("Сервер було вимкнено", atLastSeen: true);
 }
 
+// Модель AI-асистента, яку власник обрав у панелі (зберігається в базі)
+using (var scope = app.Services.CreateScope())
+{
+    var saved = scope.ServiceProvider.GetRequiredService<AppDb>().Settings.Find(AssistantApi.ProviderSettingKey)?.Value;
+    if (AssistantSettings.NormalizeProvider(saved) is { } provider) assistantSettings.Provider = provider;
+}
+
 // Під час коректного вимкнення сервера закриваємо всі сеанси і блокуємо ПК
 app.Lifetime.ApplicationStopping.Register(() =>
 {
@@ -157,5 +180,6 @@ app.MapHub<PanelHub>("/hubs/panel");   // push-оновлення панелі �
 app.MapAuthApi();
 app.MapAdminApi();
 app.MapReportsApi();
+app.MapAssistantApi();
 
 app.Run();

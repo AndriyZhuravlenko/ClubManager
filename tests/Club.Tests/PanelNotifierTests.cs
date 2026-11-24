@@ -58,6 +58,21 @@ public class PanelNotifierTests
     }
 
     [Fact]
+    public async Task New_chat_message_updates_tiles_and_open_chat()
+    {
+        using var database = new TestDatabase();
+        var hub = new FakeHubContext<PanelHub>();
+        using var db = database.Create(new PanelNotifier(hub, NullLogger<PanelNotifier>.Instance));
+
+        db.Chats.Add(new ChatMessage { PcId = 1, SessionId = 1, Author = "ivan", Text = "допоможіть", At = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        await Task.Delay(Wait);
+
+        var topics = (string[])Assert.Single(hub.Sent).Args[0]!;
+        Assert.Equal(new[] { "chat", "pcs" }, topics.Order());
+    }
+
+    [Fact]
     public async Task Nothing_is_sent_when_nothing_changed()
     {
         using var database = new TestDatabase();

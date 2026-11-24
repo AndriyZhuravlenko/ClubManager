@@ -10,7 +10,7 @@ namespace Club.Shell;
 
 /// <summary>
 /// Компактний таймер у кутку екрана. У звичайному стані — лише напівпрозорий час;
-/// кнопки «Програми» і «Завершити» з'являються, коли навести мишу. Таймер можна
+/// кнопки «Програми», «Чат» і «Завершити» з'являються, коли навести мишу. Таймер можна
 /// перетягнути мишею в будь-яке місце екрана.
 /// </summary>
 public class TimerWindow : Window
@@ -48,7 +48,17 @@ public class TimerWindow : Window
         var apps = new Button { Content = "Програми", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 4, 6, 4), Focusable = false };
         apps.Click += (_, _) => LauncherWindow.ShowLauncher();
 
+        // Чат з адміністратором; число — непрочитані відповіді
+        var chat = new Button { Content = "Чат", FontSize = 13, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 4, 6, 4), Focusable = false };
+        chat.Click += (_, _) => ChatWindow.Open();
+        ChatWindow.UnreadChanged += () =>
+        {
+            chat.Content = ChatWindow.Unread > 0 ? $"Чат ({ChatWindow.Unread})" : "Чат";
+            if (ChatWindow.Unread > 0) Expand(true);       // помітно показати, що є відповідь
+        };
+
         _buttons.Children.Add(apps);
+        _buttons.Children.Add(chat);
         _buttons.Children.Add(finish);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };

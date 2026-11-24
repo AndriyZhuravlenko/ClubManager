@@ -37,6 +37,11 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
     /// <summary>Чи заблоковано зараз робоче місце.</summary>
     public bool IsLocked => _locked;
 
+    // Віддалене керування програмами: обробники задає AppControl
+    public Func<List<RunningApp>>? ListAppsHandler { get; set; }
+    public Func<string, AppActionResult>? CloseAppHandler { get; set; }
+    public Func<string, AppActionResult>? LaunchAppHandler { get; set; }
+
     // Вид поточного сеансу (службовий — без таймера і без контролю програм)
     private SessionKind _kind = SessionKind.None;
 
@@ -92,6 +97,25 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
         });
 
         _connection.On<List<OwnerCredential>>(HubMethods.OwnerCredentials, owners.Save);
+
+        // Відповідь адміністратора в чаті — показуємо в оболонці користувача
+        _connection.On<ChatLine>(HubMethods.ChatFromAdmin, line => shell.AddChat(line));
+
+        // Запити сервера з відповіддю: список, закриття й запуск програм у сеансі користувача
+        _connection.On<List<RunningApp>>(HubMethods.ListApps, () =>
+            Task.Run(() => ListAppsHandler?.Invoke() ?? new List<RunningApp>()));
+        _connection.On<string, AppActionResult>(HubMethods.CloseApp, path => Task.Run(() =>
+        {
+            var result = CloseAppHandler?.Invoke(path) ?? new AppActionResult(false, "Не підтримується");
+            log.LogInformation("Закриття програми {Path} на запит адміністратора: {Message}", path, result.Message);
+            return result;
+        }));
+        _connection.On<string, AppActionResult>(HubMethods.LaunchApp, path => Task.Run(() =>
+        {
+            var result = LaunchAppHandler?.Invoke(path) ?? new AppActionResult(false, "Не підтримується");
+            log.LogInformation("Запуск програми {Path} на запит адміністратора: {Message}", path, result.Message);
+            return result;
+        }));
 
         _connection.Reconnecting += error =>
         {
@@ -202,6 +226,28 @@ public class AgentWorker(IOptions<AgentOptions> options, ShellPipeServer shell, 
     }
 
     /// <summary>Клієнт сам завершує сеанс або сеанс завершується через неактивність (reason = "idle").</summary>
+    /// <summary>Користувач пише адміністратору з оболонки (чат). Лише під час сеансу.</summary>
+    public async Task<LoginResult> ClientChatAsync(string? text)
+    {
+        text = text?.Trim();
+        if (string.IsNullOrEmpty(text)) return new LoginResult(false, "Порожнє повідомлення");
+        if (text.Length > ChatLine.MaxLength) return new LoginResult(false, $"Повідомлення задовге (до {ChatLine.MaxLength} символів)");
+        if (_locked) return new LoginResult(false, "Чат доступний лише під час сеансу");
+        if (_connection?.State != HubConnectionState.Connected)
+            return new LoginResult(false, "Немає зв'язку з сервером. Зверніться до адміністратора особисто");
+        try
+        {
+            var result = await _connection.InvokeAsync<LoginResult>(HubMethods.ChatFromUser, text);
+            if (result.Ok) shell.AddChat(new ChatLine(false, "Ви", text, DateTime.UtcNow));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning("Помилка надсилання повідомлення: {Message}", ex.Message);
+            return new LoginResult(false, "Помилка зв'язку з сервером");
+        }
+    }
+
     public async Task<LoginResult> ClientLogoutAsync(string? reason = null)
     {
         // Без зв'язку з сервером ПК усе одно має звільнитися: блокуємо його локально

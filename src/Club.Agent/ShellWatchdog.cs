@@ -66,15 +66,38 @@ public class ShellWatchdog(AgentWorker agent, ILogger<ShellWatchdog> log) : Back
         }
     }
 
-    private static bool StartAsUser(IntPtr token)
+    private static bool StartAsUser(IntPtr token) => StartAsUser(token, ShellPath, AppContext.BaseDirectory);
+
+    /// <summary>Сеанс Windows, у якому працює користувач за цим ПК.</summary>
+    public static uint ActiveSessionId() => WTSGetActiveConsoleSessionId();
+
+    /// <summary>
+    /// Запустити програму від імені користувача, що працює за ПК (як ніби він сам її відкрив).
+    /// Повертає null при успіху або текст помилки.
+    /// </summary>
+    public static string? LaunchInUserSession(string exePath)
+    {
+        if (!WTSQueryUserToken(WTSGetActiveConsoleSessionId(), out var token)) return "користувач не увійшов у Windows";
+        try
+        {
+            var dir = Path.GetDirectoryName(exePath) ?? AppContext.BaseDirectory;
+            return StartAsUser(token, exePath, dir) ? null : $"помилка Windows {Marshal.GetLastWin32Error()}";
+        }
+        finally
+        {
+            CloseHandle(token);
+        }
+    }
+
+    private static bool StartAsUser(IntPtr token, string exePath, string workingDirectory)
     {
         CreateEnvironmentBlock(out var environment, token, false);
         try
         {
             var startup = new STARTUPINFO { cb = Marshal.SizeOf<STARTUPINFO>(), lpDesktop = @"winsta0\default" };
-            var commandLine = new StringBuilder($"\"{ShellPath}\"");
-            var ok = CreateProcessAsUser(token, ShellPath, commandLine, IntPtr.Zero, IntPtr.Zero, false,
-                CreateUnicodeEnvironment, environment, AppContext.BaseDirectory, ref startup, out var info);
+            var commandLine = new StringBuilder($"\"{exePath}\"");
+            var ok = CreateProcessAsUser(token, exePath, commandLine, IntPtr.Zero, IntPtr.Zero, false,
+                CreateUnicodeEnvironment, environment, workingDirectory, ref startup, out var info);
             if (ok)
             {
                 CloseHandle(info.hProcess);

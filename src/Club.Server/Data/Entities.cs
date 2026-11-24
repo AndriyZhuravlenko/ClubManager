@@ -99,3 +99,16 @@ public class EventLog
     public string? Actor { get; set; }               // хто виконав дію (логін адміністратора/клієнта)
     public string Text { get; set; } = "";
 }
+
+/// <summary>Повідомлення чату між користувачем ПК і адміністратором (у межах одного сеансу).</summary>
+public class ChatMessage
+{
+    public int Id { get; set; }
+    public int PcId { get; set; }
+    public int SessionId { get; set; }
+    public bool FromAdmin { get; set; }
+    public string Author { get; set; } = "";         // логін клієнта / «гість» / логін адміністратора
+    public string Text { get; set; } = "";
+    public DateTime At { get; set; }
+    public bool Read { get; set; }                   // повідомлення користувача прочитане адміністратором
+}

@@ -15,6 +15,7 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
     public DbSet<Setting> Settings => Set<Setting>();
     public DbSet<TopUp> TopUps => Set<TopUp>();
     public DbSet<BlockedApp> BlockedApps => Set<BlockedApp>();
+    public DbSet<ChatMessage> Chats => Set<ChatMessage>();
 
     /// <summary>
     /// Створює таблиці, що з'явилися в новій версії, не чіпаючи наявних даних
@@ -39,6 +40,16 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
                 "Minutes" INTEGER NOT NULL,
                 "At" TEXT NOT NULL,
                 "Actor" TEXT NULL);
+            CREATE TABLE IF NOT EXISTS "Chats" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_Chats" PRIMARY KEY AUTOINCREMENT,
+                "PcId" INTEGER NOT NULL,
+                "SessionId" INTEGER NOT NULL,
+                "FromAdmin" INTEGER NOT NULL,
+                "Author" TEXT NOT NULL,
+                "Text" TEXT NOT NULL,
+                "At" TEXT NOT NULL,
+                "Read" INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS "IX_Chats_SessionId" ON "Chats" ("SessionId");
             """);
 
         // Нові стовпці в наявній таблиці
@@ -55,6 +66,9 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
     }
 
     // SQLite не має "ADD COLUMN IF NOT EXISTS", тому спершу перевіряємо, чи стовпець уже є
+    // Назви таблиць і стовпців задає лише код сервера (не користувач), а SQL не дозволяє передати
+    // назву стовпця параметром, тому підстановка в рядок тут безпечна
+#pragma warning disable EF1002
     private void AddColumnIfMissing(string table, string column, string definition)
     {
         var exists = Database.SqlQueryRaw<int>(
@@ -63,6 +77,7 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
         if (!exists)
             Database.ExecuteSqlRaw($"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition}");
     }
+#pragma warning restore EF1002
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -80,6 +95,7 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
         // Індекси журналу: фільтр за ПК, очищення старих записів за датою
         b.Entity<EventLog>().HasIndex(e => e.At);
         b.Entity<EventLog>().HasIndex(e => e.PcId);
+        b.Entity<ChatMessage>().HasIndex(c => c.SessionId);
     }
 
     // Після кожного збереження повідомляємо панелі адміністратора, які розділи змінилися
@@ -113,6 +129,7 @@ public class AppDb(DbContextOptions<AppDb> options, Club.Server.Services.PanelNo
                 case EventLog: topics.Add("events"); break;
                 case AppEntry or BlockedApp or Setting: topics.Add("apps"); break;
                 case AdminUser: topics.Add("admins"); break;
+                case ChatMessage: topics.Add("pcs"); topics.Add("chat"); break;
             }
         }
         return topics;

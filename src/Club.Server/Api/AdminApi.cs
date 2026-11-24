@@ -3,6 +3,8 @@ using Club.Server.Data;
 using Club.Server.Security;
 using Club.Server.Services;
 using Club.Shared;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Club.Server.Api;
@@ -17,6 +19,9 @@ public record BlockRequest(bool Blocked);
 public record NewAppRequest(string? Name, string? Path);
 public record EnforceRequest(bool Enforce);
 public record BlockRequestPattern(string? Pattern);
+public record AppPathRequest(string? Path);
+public record PcChatRequest(string? Text);
+public record AppLaunchRequest(int AppId);
 
 /// <summary>REST API для панелі адміністратора. Усі методи вимагають входу.</summary>
 public static class AdminApi
@@ -33,6 +38,11 @@ public static class AdminApi
             var pcs = await db.Pcs.OrderBy(p => p.DisplayName).ToListAsync();
             var active = await db.Sessions.Where(s => s.ClosedAt == null).ToListAsync();
             var clientNames = await db.Clients.ToDictionaryAsync(c => c.Id, c => c.Login);
+            // Непрочитані повідомлення користувачів у поточних сеансах (значок на плитці)
+            var activeIds = active.Select(s => s.Id).ToList();
+            var unread = await db.Chats.Where(c => !c.FromAdmin && !c.Read && activeIds.Contains(c.SessionId))
+                .GroupBy(c => c.PcId).Select(g => new { PcId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.PcId, x => x.Count);
 
             return pcs.Select(p =>
             {
@@ -46,6 +56,7 @@ public static class AdminApi
                     p.LastSeen,
                     p.AgentVersion,
                     Agent = registry.GetMetrics(p.Id),
+                    UnreadChat = unread.TryGetValue(p.Id, out var u) ? u : 0,
                     Session = s == null ? null : new
                     {
                         s.StartedAt,
@@ -98,6 +109,92 @@ public static class AdminApi
             return Results.Ok();
         });
 
+        // ---------- Чат з користувачем ПК ----------
+
+        // Переписка поточного сеансу (або останнього, якщо сеанс уже завершився); відкриття = прочитано
+        api.MapGet("/pcs/{id:int}/chat", async (int id, AppDb db) =>
+        {
+            var session = await db.Sessions.Where(s => s.PcId == id)
+                .OrderByDescending(s => s.ClosedAt == null).ThenByDescending(s => s.StartedAt).FirstOrDefaultAsync();
+            if (session == null) return Results.Ok(new { SessionActive = false, Messages = Array.Empty<object>() });
+
+            var messages = await db.Chats.Where(c => c.SessionId == session.Id).OrderBy(c => c.Id).ToListAsync();
+            var unreadNow = messages.Where(m => !m.FromAdmin && !m.Read).ToList();
+            if (unreadNow.Count > 0)
+            {
+                unreadNow.ForEach(m => m.Read = true);
+                await db.SaveChangesAsync();
+            }
+            return Results.Ok(new
+            {
+                SessionActive = session.ClosedAt == null,
+                Messages = messages.Select(m => new { m.FromAdmin, m.Author, m.Text, m.At })
+            });
+        });
+
+        api.MapPost("/pcs/{id:int}/chat", async (int id, PcChatRequest req, AppDb db, ConnectionRegistry registry,
+            IHubContext<Club.Server.Hubs.AgentHub> hub, ClaimsPrincipal user) =>
+        {
+            var text = req.Text?.Trim();
+            if (string.IsNullOrEmpty(text) || text.Length > ChatLine.MaxLength)
+                return Results.BadRequest(new { error = $"Повідомлення: від 1 до {ChatLine.MaxLength} символів" });
+            var session = await db.Sessions.FirstOrDefaultAsync(s => s.PcId == id && s.ClosedAt == null);
+            if (session == null) return Results.BadRequest(new { error = "На ПК немає сеансу — чат доступний лише під час сеансу" });
+            if (!registry.TryGetConnection(id, out var connection)) return Results.BadRequest(new { error = "ПК не в мережі" });
+
+            var message = new ChatMessage
+            {
+                PcId = id, SessionId = session.Id, FromAdmin = true, Author = user.Identity!.Name!, Text = text,
+                At = DateTime.UtcNow, Read = true
+            };
+            db.Chats.Add(message);
+            await db.SaveChangesAsync();
+            await hub.Clients.Client(connection).SendAsync(HubMethods.ChatFromAdmin,
+                new ChatLine(true, message.Author, text, message.At));
+            return Results.Ok();
+        });
+
+        // ---------- Програми на ПК під час сеансу ----------
+
+        api.MapGet("/pcs/{id:int}/apps", async (int id, RemoteAppsService apps, CancellationToken ct) =>
+        {
+            try { return Results.Ok(await apps.ListAsync(id, ct)); }
+            catch (RemoteAppsException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        api.MapPost("/pcs/{id:int}/apps/close", async (int id, AppPathRequest req, RemoteAppsService apps, AppDb db,
+            ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Path)) return Results.BadRequest(new { error = "Не вказано програму" });
+            try
+            {
+                var result = await apps.CloseAsync(id, req.Path, ct);
+                if (!result.Ok) return Results.BadRequest(new { error = result.Message });
+                db.Log(id, $"Адміністратор закрив програму {Path.GetFileName(req.Path)} ({result.Message.ToLowerInvariant()})", user.Identity!.Name);
+                await db.SaveChangesAsync(ct);
+                return Results.Ok(result);
+            }
+            catch (RemoteAppsException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        api.MapPost("/pcs/{id:int}/apps/launch", async (int id, AppLaunchRequest req, RemoteAppsService apps, AppDb db,
+            ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            var app = await db.Apps.FindAsync([req.AppId], ct);
+            if (app == null) return Results.BadRequest(new { error = "Програми немає в каталозі" });
+            if (!await db.Sessions.AnyAsync(s => s.PcId == id && s.ClosedAt == null && s.LockedAt == null, ct))
+                return Results.BadRequest(new { error = "На ПК немає активного сеансу — спершу відкрийте сеанс" });
+            try
+            {
+                var result = await apps.LaunchAsync(id, app.Path, ct);
+                if (!result.Ok) return Results.BadRequest(new { error = result.Message });
+                db.Log(id, $"Адміністратор запустив програму «{app.Name}»", user.Identity!.Name);
+                await db.SaveChangesAsync(ct);
+                return Results.Ok(result);
+            }
+            catch (RemoteAppsException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
         api.MapPut("/pcs/{id:int}/name", async (int id, RenameRequest req, AppDb db, ClaimsPrincipal user) =>
         {
             var pc = await db.Pcs.FindAsync(id);
@@ -119,7 +216,7 @@ public static class AdminApi
             if (await db.Sessions.AnyAsync(s => s.PcId == id && s.ClosedAt == null))
                 return Results.BadRequest(new { error = "На ПК є незавершений сеанс" });
 
-            db.Events.RemoveRange(db.Events.Where(e => e.PcId == id));
+            await db.Events.Where(e => e.PcId == id).ExecuteDeleteAsync();
             db.Pcs.Remove(pc);
             db.Log(null, $"ПК «{pc.DisplayName}» ({pc.MachineName}) видалено з панелі", user.Identity!.Name);
             await db.SaveChangesAsync();
@@ -295,59 +392,8 @@ public static class AdminApi
 
         // Фільтри: pc — "none" (події без ПК: панель, облікові записи) або Id ПК;
         // category — admin | client | agent | system; q — пошук у тексті; take — скільки записів
-        api.MapGet("/events", async (string? pc, string? category, string? q, int? take, AppDb db) =>
-        {
-            var names = await db.Pcs.ToDictionaryAsync(p => p.Id, p => p.DisplayName);
-            var adminLogins = await db.Admins.Select(a => a.Login).ToListAsync();
-            var clientLogins = await db.Clients.Select(c => c.Login).ToListAsync();
-
-            IQueryable<EventLog> query = db.Events;
-            if (pc == "none") query = query.Where(e => e.PcId == null);
-            else if (int.TryParse(pc, out var pcId)) query = query.Where(e => e.PcId == pcId);
-
-            query = category switch
-            {
-                "admin" => query.Where(e => e.Actor != null && adminLogins.Contains(e.Actor)),
-                "client" => query.Where(e => e.Actor != null && clientLogins.Contains(e.Actor)),
-                "agent" => query.Where(e => e.Actor == "агент"),
-                "system" => query.Where(e => e.Actor == null),
-                _ => query
-            };
-
-            var limit = Math.Clamp(take ?? 100, 10, 1000);
-            List<EventLog> events;
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                events = await query.OrderByDescending(e => e.Id).Take(limit).ToListAsync();
-            }
-            else
-            {
-                // SQLite не порівнює кирилицю без урахування регістру, тому шукаємо в пам'яті
-                // серед останніх 5000 подій, що пройшли інші фільтри
-                var text = q.Trim();
-                events = (await query.OrderByDescending(e => e.Id).Take(5000).ToListAsync())
-                    .Where(e => e.Text.Contains(text, StringComparison.CurrentCultureIgnoreCase)
-                             || (e.Actor ?? "").Contains(text, StringComparison.CurrentCultureIgnoreCase))
-                    .Take(limit).ToList();
-            }
-
-            string CategoryOf(string? actor) =>
-                actor == null ? "system"
-                : actor == "агент" ? "agent"
-                : adminLogins.Contains(actor) ? "admin"
-                : clientLogins.Contains(actor) ? "client"
-                : "other";
-
-            return events.Select(e => new
-            {
-                e.At,
-                e.PcId,
-                Pc = e.PcId != null && names.TryGetValue(e.PcId.Value, out var n) ? n : "—",
-                Actor = e.Actor ?? "система",
-                Category = CategoryOf(e.Actor),
-                e.Text
-            });
-        });
+        api.MapGet("/events", (string? pc, string? category, string? q, string? period, int? take, AppDb db) =>
+            EventQueries.RunAsync(db, pc, category, q, period, take is null ? 100 : Math.Max(take.Value, 10)));
     }
 
     private static IResult ToResult(string? error) =>

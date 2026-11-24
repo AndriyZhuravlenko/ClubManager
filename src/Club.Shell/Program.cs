@@ -91,12 +91,14 @@ public static class Program
         {
             _timer.Hide();
             LauncherWindow.HideIfOpen();
+            ChatWindow.Reset();
             _lock.ShowLocked(m.Text);
         }
         else
         {
             _lock.Unlock();
             _timer.Start(m.SessionEndsAt, m.Kind);
+            ChatWindow.SetLines(m.Chat);
             if (!string.IsNullOrWhiteSpace(m.Text)) MessageWindow.ShowText(m.Text);
         }
     }

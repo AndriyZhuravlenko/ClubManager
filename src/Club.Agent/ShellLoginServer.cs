@@ -10,7 +10,7 @@ namespace Club.Agent;
 /// <summary>
 /// Другий локальний канал: оболонка надсилає сюди запит на вхід або вихід клієнта,
 /// агент пересилає його на сервер і повертає відповідь.
-/// Приймаються лише запити на вхід і вихід ("login", "logout", "logout-idle") — жодних інших команд
+/// Приймаються лише запити на вхід, вихід і повідомлення адміністратору ("login", "logout", "logout-idle", "chat") — жодних інших команд
 /// від програм користувача служба не виконує.
 /// </summary>
 public class ShellLoginServer(AgentWorker agent, ILogger<ShellLoginServer> log) : BackgroundService
@@ -70,6 +70,7 @@ public class ShellLoginServer(AgentWorker agent, ILogger<ShellLoginServer> log) 
                     "login" => await agent.ClientLoginAsync(request.Login, request.Password),
                     "logout" => await agent.ClientLogoutAsync(),
                     "logout-idle" => await agent.ClientLogoutAsync("idle"),
+                    "chat" => await agent.ClientChatAsync(request.Text),
                     _ => new LoginResult(false, "Невідомий запит")
                 };
                 log.LogInformation("Запит оболонки {Action}: {Result}", request?.Action, result.Ok ? "успішно" : result.Error);

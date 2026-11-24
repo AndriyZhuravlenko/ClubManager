@@ -74,7 +74,7 @@
 
   /* Діалоги */
   .dlg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 10; }
-  #dlg { z-index: 20; }
+  #dlg { z-index: 40; }
   .dlg .box { background: #fff; padding: 20px; border-radius: 8px; min-width: 320px; max-width: 520px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
   #dlg input { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 6px; font-size: 14px; }
   #dlgText { white-space: pre-line; }
@@ -83,6 +83,70 @@
   #pcDlgTimer { font-size: 30px; font-variant-numeric: tabular-nums; margin: 6px 0; }
   .grp { margin-top: 12px; }
   .grp .lbl { font-size: 12px; color: #78716c; margin-bottom: 2px; }
+  /* AI-асистент: кнопка в куті та вікно чату */
+  #aiFab { position: fixed; right: 24px; bottom: 24px; width: 58px; height: 58px; border-radius: 50%; border: none;
+           background: linear-gradient(135deg, #6366f1, #8b5cf6 55%, #ec4899); color: #fff; cursor: pointer; z-index: 30;
+           box-shadow: 0 6px 20px rgba(99,102,241,.45); display: flex; align-items: center; justify-content: center;
+           transition: transform .15s; margin: 0; padding: 0; }
+  #aiFab:hover { transform: scale(1.07); }
+  #aiFab svg { width: 28px; height: 28px; }
+  #aiPanel { position: fixed; right: 24px; bottom: 96px; width: 390px; height: min(600px, calc(100vh - 130px));
+             background: #fff; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); z-index: 30;
+             display: flex; flex-direction: column; overflow: hidden; }
+  #aiPanel .head { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 12px 14px;
+                   display: flex; align-items: center; gap: 10px; }
+  #aiPanel .head b { font-size: 15px; }
+  #aiPanel .head .sub { font-size: 11px; opacity: .85; }
+  #aiPanel .head button { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 6px; padding: 4px 8px; }
+  #aiProvider { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 6px; padding: 3px 4px; font-size: 11px; margin-top: 3px; max-width: 220px; }
+  #aiProvider option { color: #1c1917; }
+  .pc-apps { margin-top: 10px; border-top: 1px solid #e7e5e4; padding-top: 8px; max-height: 260px; overflow-y: auto; }
+  .pc-apps table td { padding: 4px 6px; font-size: 13px; }
+  #aiPanel .head button:hover { background: rgba(255,255,255,.3); }
+  #aiMsgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fafaf9; }
+  .ai-msg { max-width: 85%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; }
+  .ai-msg.user { align-self: flex-end; background: #6366f1; color: #fff; border-bottom-right-radius: 4px; }
+  .ai-msg.bot { align-self: flex-start; background: #fff; border: 1px solid #e7e5e4; border-bottom-left-radius: 4px; }
+  .ai-msg.err { align-self: flex-start; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .ai-done { align-self: flex-start; font-size: 12px; color: #4f46e5; background: #eef2ff; border-radius: 10px; padding: 4px 10px; }
+  .ai-card { align-self: stretch; background: #fff; border: 1px solid #c7d2fe; border-left: 4px solid #6366f1; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .ai-card .t { font-weight: 600; margin-bottom: 8px; }
+  .ai-card .res { margin-top: 6px; font-size: 12px; white-space: pre-line; }
+  .ai-card button.yes { background: #6366f1; color: #fff; border: none; border-radius: 6px; padding: 5px 12px; }
+  .ai-card button.no { background: #f5f5f4; border: 1px solid #d6d3d1; border-radius: 6px; padding: 5px 12px; }
+  .ai-typing { align-self: flex-start; color: #78716c; font-size: 13px; }
+  .ai-typing span { animation: aiBlink 1.2s infinite; }
+  .ai-typing span:nth-child(2) { animation-delay: .2s; } .ai-typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes aiBlink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+  .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ai-chips button { margin: 0; background: #fff; border: 1px solid #c7d2fe; color: #4338ca; border-radius: 14px; padding: 5px 10px; font-size: 12px; }
+  .ai-chips button:hover { background: #eef2ff; }
+  #aiForm { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e7e5e4; background: #fff; }
+  #aiInput { flex: 1; resize: none; border: 1px solid #d6d3d1; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; max-height: 110px; }
+  #aiInput:focus { outline: 2px solid #a5b4fc; border-color: transparent; }
+  #aiSend { margin: 0; background: #6366f1; color: #fff; border: none; border-radius: 10px; padding: 0 14px; font-size: 18px; }
+  #aiSend:disabled { background: #c7d2fe; }
+  .ai-flash { animation: aiFlash 1.6s ease-out; }
+  @keyframes aiFlash { 0% { box-shadow: 0 0 0 3px #8b5cf6; } 100% { box-shadow: 0 0 0 3px transparent; } }
+  /* Чат з користувачами */
+  .chat-badge { display: inline-block; background: #ef4444; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; margin-left: 6px; }
+  .tile.has-chat { animation: chatPulse 1.6s ease-in-out infinite; }
+  @keyframes chatPulse { 0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,.08); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,.45); } }
+  #chatDlg { z-index: 15; }
+  #chatDlg .box { width: 440px; max-width: 92vw; display: flex; flex-direction: column; height: min(560px, 85vh); padding: 0; overflow: hidden; }
+  #chatDlg .chead { padding: 12px 16px; border-bottom: 1px solid #e7e5e4; display: flex; justify-content: space-between; align-items: center; }
+  #chatList { flex: 1; overflow-y: auto; padding: 12px; background: #fafaf9; display: flex; flex-direction: column; gap: 8px; }
+  .cmsg { max-width: 80%; padding: 7px 11px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .cmsg .meta { font-size: 11px; opacity: .75; margin-bottom: 2px; }
+  .cmsg.user { align-self: flex-start; background: #fff; border: 1px solid #e7e5e4; }
+  .cmsg.admin { align-self: flex-end; background: #0ea5e9; color: #fff; }
+  #chatForm { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e7e5e4; }
+  #chatInput { flex: 1; resize: none; border: 1px solid #d6d3d1; border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 14px; }
+  #toasts { position: fixed; left: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 35; }
+  .toast { background: #1c1917; color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+           cursor: pointer; font-size: 14px; max-width: 340px; animation: toastIn .25s ease-out; }
+  .toast small { display: block; opacity: .7; font-size: 12px; margin-top: 2px; }
+  @keyframes toastIn { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
   iframe#reportsFrame { width: 100%; border: 0; background: #f5f5f4; min-height: 400px; }
 </style>
 </head>
@@ -174,6 +238,13 @@
       <option value="agent">агенти ПК</option>
       <option value="system">система</option>
     </select>
+    Період: <select id="fPeriod" onchange="refreshEvents()">
+      <option value="">увесь час</option>
+      <option value="today">сьогодні</option>
+      <option value="24h">24 години</option>
+      <option value="7d">7 днів</option>
+      <option value="30d">30 днів</option>
+    </select>
     Пошук: <input id="fText" placeholder="текст або логін" oninput="refreshEventsSoon()">
     Показати: <select id="fTake" onchange="refreshEvents()">
       <option>100</option><option>300</option><option>1000</option>
@@ -209,8 +280,42 @@
     <div id="pcDlgTimer"></div>
     <div id="pcDlgMeta" class="muted"></div>
     <div id="pcDlgBtns"></div>
+    <div id="pcDlgApps"></div>
     <div class="btns"><button onclick="closePcDialog()">Закрити</button></div>
   </div>
+</div>
+
+<!-- Чат з користувачем ПК -->
+<div id="chatDlg" class="dlg hidden" onclick="if (event.target === this) closeChat()">
+  <div class="box">
+    <div class="chead"><b id="chatTitle">Чат</b><button onclick="closeChat()">Закрити</button></div>
+    <div id="chatList"></div>
+    <form id="chatForm" onsubmit="sendChat(); return false;">
+      <textarea id="chatInput" rows="2" maxlength="500" placeholder="Відповідь користувачу…"></textarea>
+      <button type="submit">Надіслати</button>
+    </form>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<!-- AI-асистент -->
+<button id="aiFab" title="AI-асистент" onclick="toggleAssistant()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 1.9 1.9.8-1.9.8L19 20.4l-.8-1.9-1.9-.8 1.9-.8z"/>
+  </svg>
+</button>
+<div id="aiPanel" class="hidden">
+  <div class="head">
+    <div style="flex:1"><b>AI-асистент</b><div class="sub" id="aiSub">керування панеллю природною мовою</div>
+      <select id="aiProvider" class="hidden" title="Яка модель обробляє запити" onchange="switchProvider(this.value)"></select></div>
+    <button onclick="resetAssistant()" title="Почати нову розмову">Нова</button>
+    <button onclick="toggleAssistant()" title="Згорнути">✕</button>
+  </div>
+  <div id="aiMsgs"></div>
+  <form id="aiForm" onsubmit="sendAssistant(); return false;">
+    <textarea id="aiInput" rows="1" placeholder="Напр.: покажи журнал ПК-2 за сьогодні"></textarea>
+    <button id="aiSend" type="submit" title="Надіслати">➤</button>
+  </form>
 </div>
 
 <!-- Власне діалогове вікно замість alert/confirm/prompt браузера -->
@@ -478,6 +583,8 @@ async function refreshEvents() {
   if (pc) params.set('pc', pc);
   if (cat) params.set('category', cat);
   if (text) params.set('q', text);
+  const period = document.getElementById('fPeriod').value;
+  if (period) params.set('period', period);
   params.set('take', document.getElementById('fTake').value);
 
   const events = await getJson('/api/events?' + params);
@@ -502,6 +609,7 @@ function resetFilters() {
   document.getElementById('fPc').value = '';
   document.getElementById('fCat').value = '';
   document.getElementById('fText').value = '';
+  document.getElementById('fPeriod').value = '';
   document.getElementById('fTake').value = '100';
   refreshEvents();
 }
@@ -612,9 +720,9 @@ function renderMap() {
     const t = tiles[p.id] ??= makeTile(p.id);
     map.appendChild(t.el);                     // зберігає порядок за назвою
     const st = pcState(p);
-    t.el.className = `tile st-${st}` + (selected.has(p.id) ? ' sel' : '');
+    t.el.className = `tile st-${st}` + (selected.has(p.id) ? ' sel' : '') + (p.unreadChat ? ' has-chat' : '');
     t.chk.checked = selected.has(p.id);
-    setHtml(t.body, `<div class="name">${esc(p.displayName)}</div>` +
+    setHtml(t.body, `<div class="name">${esc(p.displayName)}${p.unreadChat ? `<span class="chat-badge" title="Непрочитані повідомлення користувача">💬 ${p.unreadChat}</span>` : ''}</div>` +
       `<div class="state">${stateNames[st]}</div>` +
       `<div class="who">${whoText(p) || (st === 'free' ? '<span class="muted">готовий до роботи</span>' : '')}</div>`);
     setHtml(t.meta, metaHtml(p, newest));
@@ -668,6 +776,7 @@ async function quietApi(method, url, body) {
                                  body: body ? JSON.stringify(body) : undefined });
     if (r.status === 401) { location.href = '/login.html'; return 'потрібно увійти'; }
     if (r.ok) return null;
+    if (r.status === 403) return 'недостатньо прав';
     try { const j = await r.json(); if (j.error) return j.error; } catch {}
     return 'HTTP ' + r.status;
   } catch { return 'немає зв\'язку із сервером'; }
@@ -722,6 +831,7 @@ async function deletePc(id) {
 }
 
 function openPcDialog(id) {
+  if (openPcId !== id) document.getElementById('pcDlgApps').innerHTML = '';
   openPcId = id;
   document.getElementById('pcDlg').classList.remove('hidden');
   renderPcDialog();
@@ -757,6 +867,11 @@ function renderPcDialog() {
       <button ${dis} onclick="sendCommand(${p.id}, 'Unlock')">${s && s.paused ? 'Відновити (розблок)' : 'Розблок'}</button>
       <button ${dis} onclick="sendCommand(${p.id}, 'Reboot')">Перезавантажити</button>
       <button ${dis} onclick="sendCommand(${p.id}, 'Shutdown')">Вимкнути</button></div>` +
+    `<div class="grp"><div class="lbl">Зв'язок з користувачем</div>
+      <button ${s ? '' : 'disabled'} onclick="openChat(${p.id})">Чат${p.unreadChat ? ` (нових: ${p.unreadChat})` : ''}</button>
+      ${s ? '' : '<span class="muted">доступний під час сеансу</span>'}</div>` +
+    `<div class="grp"><div class="lbl">Програми на ПК</div>
+      <button ${dis} onclick="loadPcApps(${p.id})">Запущені програми / запустити</button></div>` +
     `<div class="grp"><div class="lbl">Інше</div>
       <button onclick="rename(${p.id})">Перейменувати</button>
       <button onclick="filterPc(${p.id})">Журнал цього ПК</button>` +
@@ -766,13 +881,21 @@ function renderPcDialog() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('dlg').classList.contains('hidden')) closePcDialog();
+  if (e.key === 'Escape' && document.getElementById('dlg').classList.contains('hidden')) {
+    if (chatPcId !== null) closeChat(); else closePcDialog();
+  }
 });
 
 // ---------- Завантаження розділів ----------
 
+let prevUnread = null;   // для сповіщень: скільки непрочитаних було на кожному ПК
+
 async function loadPcs() {
   pcs = await getJson('/api/pcs');
+  const unreadNow = Object.fromEntries(pcs.map(p => [p.id, p.unreadChat || 0]));
+  if (prevUnread) for (const p of pcs)
+    if ((p.unreadChat || 0) > (prevUnread[p.id] || 0) && chatPcId !== p.id) notifyChat(p);
+  prevUnread = unreadNow;
   pcsAt = Date.now();
   pcNames = Object.fromEntries(pcs.map(p => [p.id, p.displayName]));
   renderMap();
@@ -827,7 +950,7 @@ async function loadAdmins() {
   })), '');
 }
 
-const loaders = { pcs: loadPcs, clients: loadClients, apps: loadApps, admins: loadAdmins };
+const loaders = { pcs: loadPcs, clients: loadClients, apps: loadApps, admins: loadAdmins, chat: loadChat };
 let eventsStale = true;   // журнал перезавантажується лише на відкритій вкладці
 
 async function load(topics) {
@@ -933,6 +1056,332 @@ function showTab(tab) {
 }
 document.querySelectorAll('#tabs a').forEach(a => a.onclick = e => { e.preventDefault(); showTab(a.dataset.tab); });
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+// ---------- Чат з користувачами ПК ----------
+
+let chatPcId = null;
+
+function notifyChat(p) {
+  const who = p.session?.client || (p.session?.serviceAdmin ? 'адміністратор' : 'гість');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `💬 Нове повідомлення з <b>${esc(p.displayName)}</b><small>${esc(who)} · натисніть, щоб відкрити чат</small>`;
+  el.onclick = () => { el.remove(); openChat(p.id); };
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 12000);
+  beep();
+}
+
+// Короткий звуковий сигнал без звукових файлів
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.35);
+  } catch {}
+}
+
+async function openChat(id) {
+  chatPcId = id;
+  document.getElementById('chatTitle').textContent = `Чат · ${pcNames[id] || 'ПК'}`;
+  document.getElementById('chatList').innerHTML = '<div class="muted">Завантаження…</div>';
+  document.getElementById('chatDlg').classList.remove('hidden');
+  await loadChat();
+  document.getElementById('chatInput').focus();
+}
+
+function closeChat() {
+  chatPcId = null;
+  document.getElementById('chatDlg').classList.add('hidden');
+}
+
+async function loadChat() {
+  if (chatPcId === null) return;
+  const id = chatPcId;
+  let data;
+  try { data = await getJson(`/api/pcs/${id}/chat`); } catch { return; }
+  if (chatPcId !== id) return;
+  const list = document.getElementById('chatList');
+  const html = (data.messages || []).map(m =>
+    `<div class="cmsg ${m.fromAdmin ? 'admin' : 'user'}"><div class="meta">${esc(m.fromAdmin ? m.author : m.author)} · ` +
+    `${new Date(m.at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}</div>${esc(m.text)}</div>`).join('') ||
+    `<div class="muted">${data.sessionActive ? 'Повідомлень ще немає. Напишіть користувачу першим.' : 'Сеансу немає — переписка недоступна.'}</div>`;
+  if (list._html !== html) { list.innerHTML = html; list._html = html; list.scrollTop = list.scrollHeight; }
+  document.getElementById('chatInput').disabled = !data.sessionActive;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || chatPcId === null) return;
+  if (await api('POST', `/api/pcs/${chatPcId}/chat`, { text })) { input.value = ''; loadChat(); }
+}
+
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+// ---------- Програми на ПК (під час сеансу) ----------
+
+let pcApps = [];
+async function loadPcApps(id) {
+  const box = document.getElementById('pcDlgApps');
+  box.innerHTML = '<div class="pc-apps muted">Запитую список у ПК…</div>';
+  let list;
+  try {
+    const r = await fetch(`/api/pcs/${id}/apps`);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { box.innerHTML = `<div class="pc-apps" style="color:#991b1b">${esc(j.error || 'Помилка ' + r.status)}</div>`; return; }
+    list = j;
+  } catch { box.innerHTML = '<div class="pc-apps" style="color:#991b1b">Немає зв\'язку із сервером</div>'; return; }
+  if (openPcId !== id) return;
+  pcApps = list;
+  const rows = list.map((a, i) =>
+    `<tr><td><b>${esc(a.title)}</b><div class="muted">${esc(a.fileName)}${a.processes > 1 ? ` · процесів: ${a.processes}` : ''} · ${a.memoryMb} МБ</div></td>` +
+    `<td style="text-align:right"><button onclick="closePcApp(${id}, ${i})">Закрити</button></td></tr>`).join('');
+  const catalog = Object.entries(appNames).map(([appId, name]) => `<option value="${appId}">${esc(name)}</option>`).join('');
+  box.innerHTML = `<div class="pc-apps">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <b>Запущені програми</b><button onclick="loadPcApps(${id})">Оновити</button></div>
+    <table style="width:100%">${rows || '<tr><td class="muted">Користувач не запустив жодної програми</td></tr>'}</table>
+    <div style="margin-top:8px">Запустити з каталогу:
+      ${catalog ? `<select id="pcLaunchApp">${catalog}</select> <button onclick="launchPcApp(${id})">Запустити</button>`
+                : '<span class="muted">каталог порожній</span>'}</div></div>`;
+}
+
+async function closePcApp(id, index) {
+  const app = pcApps[index];
+  if (!app || !await dialog(`Закрити «${app.title}» на ${pcNames[id]}? Незбережені дані користувача в цій програмі буде втрачено.`)) return;
+  if (await api('POST', `/api/pcs/${id}/apps/close`, { path: app.path })) setTimeout(() => loadPcApps(id), 800);
+}
+
+async function launchPcApp(id) {
+  const appId = Number(document.getElementById('pcLaunchApp').value);
+  if (await api('POST', `/api/pcs/${id}/apps/launch`, { appId })) setTimeout(() => loadPcApps(id), 2500);
+}
+
+// ---------- AI-асистент ----------
+// Модель лише пропонує дії. Керування панеллю (вкладка, фільтри, вікно ПК) виконується одразу,
+// а дії, що змінюють стан, — лише після кнопки «Виконати» і через ті самі API, що й звичайні кнопки.
+
+let aiConversation = null, aiBusy = false, aiConfigured = null;
+const aiSuggestions = ['Які ПК зараз вільні?', 'Покажи журнал за сьогодні, тільки дії клієнтів',
+                       'Що відбувалося на ПК-1 за останні 24 години?', 'Надішли всім ПК повідомлення «Клуб закривається о 22:00»'];
+
+async function toggleAssistant() {
+  const panel = document.getElementById('aiPanel');
+  panel.classList.toggle('hidden');
+  if (panel.classList.contains('hidden')) return;
+  if (aiConfigured === null) await loadAssistantStatus();
+  if (!document.getElementById('aiMsgs').children.length) aiWelcome();
+  document.getElementById('aiInput').focus();
+}
+
+const providerNames = { Cloud: 'Хмара', Local: 'Локально' };
+async function loadAssistantStatus() {
+  try {
+    const st = await getJson('/api/assistant/status');
+    aiConfigured = st.configured;
+    document.getElementById('aiSub').textContent = st.configured ? `${providerNames[st.provider]} · ${st.model}` : 'не налаштовано';
+    const select = document.getElementById('aiProvider');
+    select.innerHTML = st.providers.map(p =>
+      `<option value="${p.id}">${esc(p.label)}${p.ready ? '' : ' — ' + esc(p.note)}</option>`).join('');
+    select.value = st.provider;
+    select.classList.toggle('hidden', !st.canSwitch);
+  } catch { aiConfigured = false; }
+}
+
+async function switchProvider(provider) {
+  if (!await api('POST', '/api/assistant/provider', { provider })) { await loadAssistantStatus(); return; }
+  if (aiConversation) quietApi('POST', '/api/assistant/reset', { conversationId: aiConversation });
+  aiConversation = null;
+  await loadAssistantStatus();
+  aiWelcome();
+  aiNote(provider === 'Local' ? 'тепер працює локальна модель — без інтернету' : 'тепер працює хмарна модель');
+}
+
+function aiWelcome() {
+  const box = document.getElementById('aiMsgs');
+  box.innerHTML = '';
+  if (!aiConfigured) {
+    aiAdd('bot', 'Асистент ще не налаштований: потрібен ключ API хмарної моделі у файлі assistant-key.txt поруч із сервером або локальна модель (власник може обрати її вгорі). Інструкція — у README, розділ «AI-асистент».');
+    return;
+  }
+  aiAdd('bot', 'Привіт! Я допоможу з адмініструванням: покажу стан ПК, відфільтрую журнал, знайду клієнта або підготую дію — заблокувати ПК, відкрити сеанс, надіслати повідомлення. Дії, що щось змінюють, виконуються лише після вашого підтвердження.');
+  const chips = document.createElement('div');
+  chips.className = 'ai-chips';
+  aiSuggestions.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = t;
+    b.onclick = () => { document.getElementById('aiInput').value = t; sendAssistant(); };
+    chips.appendChild(b);
+  });
+  box.appendChild(chips);
+}
+
+async function resetAssistant() {
+  if (aiConversation) quietApi('POST', '/api/assistant/reset', { conversationId: aiConversation });
+  aiConversation = null;
+  aiWelcome();
+}
+
+function aiAdd(kind, text) {
+  const box = document.getElementById('aiMsgs');
+  const el = document.createElement('div');
+  el.className = 'ai-msg ' + kind;
+  // Безпечне форматування: спершу екрануємо, потім лише **жирний**
+  el.innerHTML = esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+
+function aiNote(text) {
+  const el = document.createElement('div');
+  el.className = 'ai-done';
+  el.textContent = '↳ ' + text;
+  const box = document.getElementById('aiMsgs');
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendAssistant() {
+  const input = document.getElementById('aiInput');
+  const message = input.value.trim();
+  if (!message || aiBusy) return;
+  if (!aiConfigured) { aiAdd('err', 'Асистент не налаштований.'); return; }
+  input.value = '';
+  document.querySelectorAll('#aiMsgs .ai-chips').forEach(c => c.remove());
+  aiAdd('user', message);
+
+  aiBusy = true;
+  document.getElementById('aiSend').disabled = true;
+  const box = document.getElementById('aiMsgs');
+  const typing = document.createElement('div');
+  typing.className = 'ai-typing';
+  typing.innerHTML = 'Асистент думає<span>.</span><span>.</span><span>.</span>';
+  box.appendChild(typing);
+  box.scrollTop = box.scrollHeight;
+  try {
+    const r = await fetch('/api/assistant/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId: aiConversation, message })
+    });
+    if (r.status === 401) { location.href = '/login.html'; return; }
+    const data = await r.json().catch(() => ({}));
+    typing.remove();
+    if (data.conversationId) aiConversation = data.conversationId;
+    if (!r.ok) { aiAdd('err', data.error || ('Помилка ' + r.status)); return; }
+    aiAdd('bot', data.reply);
+    if (data.model) document.getElementById('aiSub').textContent =
+      `${providerNames[document.getElementById('aiProvider').value] || 'Хмара'} · ${data.model}`;
+    for (const a of data.actions || []) aiApply(a);
+    for (const c of data.confirmations || []) aiConfirmCard(c);
+  } catch {
+    typing.remove();
+    aiAdd('err', 'Немає зв\'язку із сервером.');
+  } finally {
+    aiBusy = false;
+    document.getElementById('aiSend').disabled = false;
+    input.focus();
+  }
+}
+
+function aiFlash(el) {
+  if (!el) return;
+  el.classList.remove('ai-flash');
+  void el.offsetWidth;
+  el.classList.add('ai-flash');
+}
+
+// Дії з керування панеллю — лише з цього переліку
+const tabNames = { pcs: "Комп'ютери", clients: 'Клієнти', apps: 'Програми', events: 'Журнал', reports: 'Звіти', admins: 'Адміністратори' };
+function aiApply(a) {
+  const p = a.params || {};
+  if (a.type === 'showTab') {
+    showTab(p.tab);
+    aiNote(`відкрито вкладку «${tabNames[p.tab] || p.tab}»`);
+  } else if (a.type === 'filterEvents') {
+    closePcDialog();
+    const set = (id, v) => { const el = document.getElementById(id); el.value = v ?? ''; if (el.value !== String(v ?? '')) el.value = ''; };
+    set('fPc', p.pc); set('fCat', p.category); set('fPeriod', p.period); set('fTake', p.take || '100');
+    document.getElementById('fText').value = p.q || '';
+    showTab('events');
+    refreshEvents();
+    aiFlash(document.querySelector('#tab-events .filters'));
+    const parts = [];
+    if (p.pc) parts.push(p.pc === 'none' ? 'панель' : (pcNames[p.pc] || 'ПК #' + p.pc));
+    if (p.category) parts.push(catNames[p.category] || p.category);
+    if (p.period) parts.push(document.querySelector(`#fPeriod option[value="${p.period}"]`)?.textContent || p.period);
+    if (p.q) parts.push(`«${p.q}»`);
+    aiNote('журнал: ' + (parts.join(', ') || 'усі події'));
+  } else if (a.type === 'openPc') {
+    showTab('pcs');
+    openPcDialog(Number(p.id));
+    aiNote(`відкрито «${pcNames[p.id] || 'ПК'}»`);
+  }
+}
+
+function aiConfirmCard(c) {
+  const box = document.getElementById('aiMsgs');
+  const card = document.createElement('div');
+  card.className = 'ai-card';
+  card.innerHTML = `<div class="t">${esc(c.title)}</div>
+    <button type="button" class="yes">Виконати</button> <button type="button" class="no">Скасувати</button>
+    <div class="res muted"></div>`;
+  const [yes, no] = card.querySelectorAll('button');
+  const res = card.querySelector('.res');
+  no.onclick = async () => {
+    yes.remove(); no.remove();
+    res.textContent = 'Скасовано';
+    await quietApi('POST', '/api/assistant/confirmed', { conversationId: aiConversation, actionId: c.id, accepted: false, success: false });
+  };
+  yes.onclick = async () => {
+    yes.disabled = no.disabled = true;
+    res.textContent = 'Виконується…';
+    const { ok, text } = await aiExecute(c);
+    yes.remove(); no.remove();
+    res.textContent = (ok ? '✓ ' : '✗ ') + text;
+    res.style.color = ok ? '#166534' : '#991b1b';
+    await quietApi('POST', '/api/assistant/confirmed',
+      { conversationId: aiConversation, actionId: c.id, accepted: true, success: ok, result: text });
+    refresh();
+  };
+  box.appendChild(card);
+  box.scrollTop = box.scrollHeight;
+}
+
+// Виконання підтвердженої дії: фіксований перелік видів → звичайні API панелі (з тими самими правами)
+async function aiExecute(c) {
+  const p = c.params || {};
+  const calls = {
+    command:       () => (p.pcIds || []).map(id => ['POST', `/api/pcs/${id}/command`, { type: p.type, text: p.text }, pcNames[id]]),
+    startSession:  () => (p.pcIds || []).map(id => ['POST', `/api/pcs/${id}/session`, { minutes: p.minutes }, pcNames[id]]),
+    extendSession: () => [['POST', `/api/pcs/${p.pcId}/session/extend`, { minutes: p.minutes }, pcNames[p.pcId]]],
+    endSession:    () => (p.pcIds || []).map(id => ['POST', `/api/pcs/${id}/session/end`, null, pcNames[id]]),
+    topUp:         () => [['POST', `/api/clients/${p.clientId}/topup`, { minutes: p.minutes }, clientNames[p.clientId]]],
+    blockClient:   () => [['POST', `/api/clients/${p.clientId}/block`, { blocked: !!p.blocked }, clientNames[p.clientId]]],
+    addBlocked:    () => [['POST', '/api/blocked', { pattern: p.pattern }, p.pattern]],
+    closeApp:      () => [['POST', `/api/pcs/${p.pcId}/apps/close`, { path: p.path }, pcNames[p.pcId]]],
+    launchApp:     () => [['POST', `/api/pcs/${p.pcId}/apps/launch`, { appId: p.appId }, pcNames[p.pcId]]],
+  }[c.kind];
+  if (!calls) return { ok: false, text: 'невідомий вид дії' };
+  const list = calls();
+  const results = await Promise.all(list.map(async ([method, url, body, name]) => ({ name, err: await quietApi(method, url, body) })));
+  const failed = results.filter(r => r.err);
+  if (!failed.length) return { ok: true, text: results.length > 1 ? `Виконано на ${results.length} об'єктах` : 'Виконано' };
+  return { ok: false, text: `Виконано ${results.length - failed.length} з ${results.length}. ` +
+                            failed.map(r => `${r.name || ''}: ${r.err}`).join('; ') };
+}
+
+document.getElementById('aiInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAssistant(); }
+});
 
 // ---------- Старт ----------
 
